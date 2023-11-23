@@ -20,7 +20,7 @@
 //!     .build();
 //! ```
 //!
-//! In this example, a [`SimpleDynamicProgram`] is created with a time limit of 400 time steps.
+//! In this example, a [`DynamicProgram`] is created with a time limit of 400 time steps.
 //! As can be seen, a [`Kernel`](crate::kernel::Kernel) must be specified. More information on
 //! kernels can be found in the documentation of the [`kernel`](crate::kernel) module.
 //!
@@ -65,7 +65,7 @@
 //! normal probability that was assigned to it while computing the dynamic program.
 
 use crate::dataset::point::XYPoint;
-use crate::dp::simple::SimpleDynamicProgram;
+use crate::dp::simple::DynamicProgram;
 use crate::dp::{DynamicProgramPool, DynamicProgramType};
 use crate::kernel::Kernel;
 use num::Zero;
@@ -140,7 +140,7 @@ impl DynamicProgramBuilder {
     }
 
     /// Sets the type of the dynamic program as a
-    /// [`SimpleDynamicProgram`].
+    /// [`DynamicProgram`].
     pub fn simple(mut self) -> Self {
         self.dp_type = Some(DynamicProgramType::Simple);
 
@@ -169,7 +169,7 @@ impl DynamicProgramBuilder {
     }
 
     /// Sets the [`Kernel`](crate::kernel::Kernel) for the dynamic program. Use this in combination
-    /// with a [`SimpleDynamicProgram`].
+    /// with a [`DynamicProgram`].
     pub fn kernel(mut self, kernel: Kernel) -> Self {
         self.kernels(vec![(0, kernel)])
     }
@@ -289,7 +289,7 @@ impl DynamicProgramBuilder {
                     }
                 }
 
-                Ok(DynamicProgramPool::Single(SimpleDynamicProgram {
+                Ok(DynamicProgramPool::Single(DynamicProgram {
                     table: vec![
                         vec![vec![Zero::zero(); 2 * time_limit + 1]; 2 * time_limit + 1];
                         time_limit + 1

@@ -21,14 +21,14 @@ use {
     zstd::{Decoder, Encoder},
 };
 
-pub struct SimpleDynamicProgram {
+pub struct DynamicProgram {
     pub(crate) table: Vec<Vec<Vec<f64>>>,
     pub(crate) time_limit: usize,
     pub(crate) kernels: Vec<Kernel>,
     pub(crate) field_types: Vec<Vec<usize>>,
 }
 
-impl SimpleDynamicProgram {
+impl DynamicProgram {
     pub fn at(&self, x: isize, y: isize, t: usize) -> f64 {
         let x = (self.time_limit as isize + x) as usize;
         let y = (self.time_limit as isize + y) as usize;
@@ -143,7 +143,7 @@ impl SimpleDynamicProgram {
     }
 }
 
-impl DynamicPrograms for SimpleDynamicProgram {
+impl DynamicPrograms for DynamicProgram {
     #[cfg(not(tarpaulin_include))]
     fn limits(&self) -> (isize, isize) {
         (-(self.time_limit as isize), self.time_limit as isize)
@@ -436,7 +436,7 @@ fn apply_kernel(
 // }
 
 #[cfg(not(tarpaulin_include))]
-impl Debug for SimpleDynamicProgram {
+impl Debug for DynamicProgram {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("DynamicProgram")
             .field("time_limit", &self.time_limit)
@@ -444,7 +444,7 @@ impl Debug for SimpleDynamicProgram {
     }
 }
 
-impl PartialEq for SimpleDynamicProgram {
+impl PartialEq for DynamicProgram {
     fn eq(&self, other: &Self) -> bool {
         self.time_limit == other.time_limit
             && self.table == other.table
@@ -452,7 +452,7 @@ impl PartialEq for SimpleDynamicProgram {
     }
 }
 
-impl Eq for SimpleDynamicProgram {}
+impl Eq for DynamicProgram {}
 
 #[cfg(test)]
 mod tests {

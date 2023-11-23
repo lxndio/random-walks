@@ -28,7 +28,7 @@
 //! There are two different types of dynamic programs which compute the random walk probabilities.
 //! They are listed below together with short descriptions.
 //!
-//! - [`SimpleDynamicProgram`](dp::simple::SimpleDynamicProgram): A dynamic program that uses a
+//! - [`SimpleDynamicProgram`](dp::simple::DynamicProgram): A dynamic program that uses a
 //! single kernel to compute the probabilities.
 //! - [`MultiDynamicProgram`](dp::multi::MultiDynamicProgram): A dynamic program that uses multiple
 //! kernels to compute the probabilities. This is for example required when using correlated

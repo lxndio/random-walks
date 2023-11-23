@@ -4,3 +4,5 @@
 - `DynamicProgramBuilder` has been modified accordingly to support passing different kernels for different field types
 - `DynamicProgramBuilder::kernels()` is now used for that instead of for passing multiple kernels to a `MultiDynamicProgram`
 - Field probabilities are removed in favor of field types 
+- `MultiDynamicProgram` is removed in favor of `DynamicProgramPool`
+- `SimpleDynamicProgram` is renamed to `DynamicProgram`

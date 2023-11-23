@@ -9,7 +9,7 @@
 //! There are two different types of dynamic programs which compute the random walk probabilities.
 //! They are listed below together with short descriptions.
 //!
-//! - [`SimpleDynamicProgram`]: A dynamic program that uses a single kernel to compute the
+//! - [`DynamicProgram`]: A dynamic program that uses a single kernel to compute the
 //! probabilities.
 //!
 //! Dynamic programs are wrapped into the [`DynamicProgramPool`] enum and must
@@ -37,7 +37,7 @@
 //!     .unwrap();
 //! ```
 //!
-//! In this example, a [`SimpleDynamicProgram`] is created with a time limit of 400 time steps.
+//! In this example, a [`DynamicProgram`] is created with a time limit of 400 time steps.
 //! As can be seen, a [`Kernel`](crate::kernel::Kernel) must be specified. More information on
 //! kernels can be found in the documentation of the [`kernel`](crate::kernel) module.
 //!
@@ -65,14 +65,13 @@
 //! can be run.
 //!
 
-use crate::dp::simple::SimpleDynamicProgram;
+use crate::dp::simple::DynamicProgram;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 pub mod builder;
 pub mod simple;
 
-#[deprecated]
 pub trait DynamicPrograms {
     fn limits(&self) -> (isize, isize);
 
@@ -99,20 +98,20 @@ pub enum DynamicProgramError {
 }
 
 pub enum DynamicProgramPool {
-    Single(SimpleDynamicProgram),
-    Multiple(Vec<SimpleDynamicProgram>),
+    Single(DynamicProgram),
+    Multiple(Vec<DynamicProgram>),
 }
 
 #[cfg(not(tarpaulin_include))]
 impl DynamicProgramPool {
-    fn try_unwrap(&self) -> Result<&SimpleDynamicProgram, DynamicProgramError> {
+    fn try_unwrap(&self) -> Result<&DynamicProgram, DynamicProgramError> {
         match self {
             DynamicProgramPool::Single(single) => Ok(single),
             DynamicProgramPool::Multiple(_) => Err(DynamicProgramError::UnwrapOnMultiple),
         }
     }
 
-    fn try_unwrap_mut(&mut self) -> Result<&mut SimpleDynamicProgram, DynamicProgramError> {
+    fn try_unwrap_mut(&mut self) -> Result<&mut DynamicProgram, DynamicProgramError> {
         match self {
             DynamicProgramPool::Single(single) => Ok(single),
             DynamicProgramPool::Multiple(_) => Err(DynamicProgramError::UnwrapOnMultiple),
