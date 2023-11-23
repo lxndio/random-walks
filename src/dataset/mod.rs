@@ -69,14 +69,14 @@
 //! processing logic.
 //!
 //! The following example generates a random walk between the data points with indices 0 and 1 with
-//! 400 time steps. A previously computed [`DynamicProgram`](crate::dp::DynamicProgram) and a
+//! 400 time steps. A previously computed [`DynamicProgram`](crate::dp::DynamicProgramPool) and a
 //! [`Walker`](crate::walker::Walker) must be specified.
 //!
 //! ```
 //! # use randomwalks_lib::dataset::Dataset;
 //! # use randomwalks_lib::dataset::loader::CoordinateType;
 //! # use randomwalks_lib::dp::builder::DynamicProgramBuilder;
-//! # use randomwalks_lib::dp::DynamicProgram;
+//! # use randomwalks_lib::dp::DynamicProgramPool;
 //! # use randomwalks_lib::dp::simple::SimpleDynamicProgram;
 //! # use randomwalks_lib::kernel::Kernel;
 //! # use randomwalks_lib::kernel::simple_rw::SimpleRwGenerator;
@@ -99,14 +99,14 @@
 //! The following example generates 10 random walks each between all neighboring pairs of data
 //! points between indices 0 and 100, i.e. 10 walks between data points 0 and 1, 10 walks between
 //! data points 1 and 2, and so on. All walks have 400 time steps each. A previously computed
-//! [`DynamicProgram`](crate::dp::DynamicProgram) and a [`Walker`](crate::walker::Walker) must be
+//! [`DynamicProgram`](crate::dp::DynamicProgramPool) and a [`Walker`](crate::walker::Walker) must be
 //! specified.
 //!
 //! ```
 //! # use randomwalks_lib::dataset::{Dataset, DatasetWalksBuilder};
 //! # use randomwalks_lib::dataset::loader::CoordinateType;
 //! # use randomwalks_lib::dp::builder::DynamicProgramBuilder;
-//! # use randomwalks_lib::dp::DynamicProgram;
+//! # use randomwalks_lib::dp::DynamicProgramPool;
 //! # use randomwalks_lib::dp::simple::SimpleDynamicProgram;
 //! # use randomwalks_lib::kernel::Kernel;
 //! # use randomwalks_lib::kernel::simple_rw::SimpleRwGenerator;
@@ -142,7 +142,7 @@ pub mod point;
 pub mod walks_builder;
 
 use crate::dataset::loader::{CoordinateType, DatasetLoader};
-use crate::dp::{DynamicProgram, DynamicPrograms};
+use crate::dp::{DynamicProgramPool, DynamicPrograms};
 use crate::walk::Walk;
 use crate::walker::Walker;
 use crate::xy;
@@ -460,7 +460,7 @@ impl Dataset {
 
     pub fn rw_between(
         &self,
-        dp: &DynamicProgram,
+        dp: &DynamicProgramPool,
         walker: &Box<dyn Walker>,
         from: usize,
         to: usize,
@@ -533,7 +533,7 @@ impl Dataset {
 
     pub fn rw_between_intermediate(
         &self,
-        dp: &DynamicProgram,
+        dp: &DynamicProgramPool,
         walker: &Box<dyn Walker>,
         from: usize,
         to: usize,

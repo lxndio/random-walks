@@ -11,10 +11,8 @@
 //!
 //! - [`SimpleDynamicProgram`]: A dynamic program that uses a single kernel to compute the
 //! probabilities.
-//! - [`MultiDynamicProgram`]: A dynamic program that uses multiple kernels to compute the
-//! probabilities. This is for example required when using correlated random walks.
 //!
-//! Dynamic programs are wrapped into the [`DynamicProgram`] enum and must
+//! Dynamic programs are wrapped into the [`DynamicProgramPool`] enum and must
 //! implement the [`DynamicPrograms`] trait.
 //!
 //! # Examples
@@ -67,14 +65,14 @@
 //! can be run.
 //!
 
-use crate::dp::multi::MultiDynamicProgram;
 use crate::dp::simple::SimpleDynamicProgram;
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 pub mod builder;
-pub mod multi;
 pub mod simple;
 
+#[deprecated]
 pub trait DynamicPrograms {
     fn limits(&self) -> (isize, isize);
 
@@ -92,57 +90,79 @@ pub trait DynamicPrograms {
     fn save(&self, filename: String) -> anyhow::Result<()>;
 }
 
-pub enum DynamicProgram {
-    Simple(SimpleDynamicProgram),
-    Multi(MultiDynamicProgram),
+#[derive(Error, Debug)]
+pub enum DynamicProgramError {
+    /// This error occurs when try_unwrap() is called on a `DynamicProgramPool` holding multiple
+    /// dynamic programs.
+    #[error("try_unwrap() can only be called on a single dynamic program")]
+    UnwrapOnMultiple,
+}
+
+pub enum DynamicProgramPool {
+    Single(SimpleDynamicProgram),
+    Multiple(Vec<SimpleDynamicProgram>),
 }
 
 #[cfg(not(tarpaulin_include))]
-impl DynamicProgram {
-    fn unwrap(&self) -> &dyn DynamicPrograms {
+impl DynamicProgramPool {
+    fn try_unwrap(&self) -> Result<&SimpleDynamicProgram, DynamicProgramError> {
         match self {
-            DynamicProgram::Simple(simple) => simple,
-            DynamicProgram::Multi(multi) => multi,
+            DynamicProgramPool::Single(single) => Ok(single),
+            DynamicProgramPool::Multiple(_) => Err(DynamicProgramError::UnwrapOnMultiple),
         }
     }
 
-    fn unwrap_mut(&mut self) -> &mut dyn DynamicPrograms {
+    fn try_unwrap_mut(&mut self) -> Result<&mut SimpleDynamicProgram, DynamicProgramError> {
         match self {
-            DynamicProgram::Simple(simple) => simple,
-            DynamicProgram::Multi(multi) => multi,
+            DynamicProgramPool::Single(single) => Ok(single),
+            DynamicProgramPool::Multiple(_) => Err(DynamicProgramError::UnwrapOnMultiple),
         }
     }
 }
 
 #[cfg(not(tarpaulin_include))]
-impl DynamicPrograms for DynamicProgram {
+impl DynamicPrograms for DynamicProgramPool {
+    /// Wrapper for `SimpleDynamicProgram::limits()`. Fails if called on a `DynamicProgramPool`
+    /// holding multiple dynamic programs.
     fn limits(&self) -> (isize, isize) {
-        self.unwrap().limits()
+        self.try_unwrap().unwrap().limits()
     }
 
+    /// Wrapper for `SimpleDynamicProgram::compute()`. Fails if called on a `DynamicProgramPool`
+    /// holding multiple dynamic programs.
     fn compute(&mut self) {
-        self.unwrap_mut().compute()
+        self.try_unwrap_mut().unwrap().compute()
     }
 
+    /// Wrapper for `SimpleDynamicProgram::compute_parallel()`. Fails if called on a
+    /// `DynamicProgramPool` holding multiple dynamic programs.
     fn compute_parallel(&mut self) {
-        self.unwrap_mut().compute_parallel()
+        self.try_unwrap_mut().unwrap().compute_parallel()
     }
 
+    /// Wrapper for `SimpleDynamicProgram::field_types()`. Fails if called on a `DynamicProgramPool`
+    /// holding multiple dynamic programs.
     fn field_types(&self) -> Vec<Vec<usize>> {
-        self.unwrap().field_types()
+        self.try_unwrap().unwrap().field_types()
     }
 
+    /// Wrapper for `SimpleDynamicProgram::heatmap()`. Fails if called on a `DynamicProgramPool`
+    /// holding multiple dynamic programs.
     #[cfg(feature = "plotting")]
     fn heatmap(&self, path: String, t: usize) -> anyhow::Result<()> {
-        self.unwrap().heatmap(path, t)
+        self.try_unwrap().unwrap().heatmap(path, t)
     }
 
+    /// Wrapper for `SimpleDynamicProgram::print()`. Fails if called on a `DynamicProgramPool`
+    /// holding multiple dynamic programs.
     fn print(&self, t: usize) {
-        self.unwrap().print(t)
+        self.try_unwrap().unwrap().print(t)
     }
 
+    /// Wrapper for `SimpleDynamicProgram::save()`. Fails if called on a `DynamicProgramPool`
+    /// holding multiple dynamic programs.
     fn save(&self, filename: String) -> anyhow::Result<()> {
-        self.unwrap().save(filename)
+        self.try_unwrap().unwrap().save(filename)
     }
 }
 
@@ -150,5 +170,4 @@ impl DynamicPrograms for DynamicProgram {
 pub enum DynamicProgramType {
     #[default]
     Simple,
-    Multi,
 }

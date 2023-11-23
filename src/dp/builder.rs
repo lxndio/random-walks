@@ -1,7 +1,7 @@
 //! Provides a builder for dynamic programs.
 //!
 //! The [`DynamicProgramBuilder`] is used to create and initialize new
-//! [`DynamicProgram`s](crate::dp::DynamicProgram). In the following, a short overview of all
+//! [`DynamicProgram`s](crate::dp::DynamicProgramPool). In the following, a short overview of all
 //! options will be given.
 //!
 //! # Required Options
@@ -30,7 +30,7 @@
 //! function.
 //!
 //! After calling [`build()`](DynamicProgramBuilder::build), the builder will return either a
-//! [`DynamicProgram`](crate::dp::DynamicProgram) or a
+//! [`DynamicProgram`](crate::dp::DynamicProgramPool) or a
 //! [`DynamicProgramBuilderError`](DynamicProgramBuilderError).
 //!
 //! # Barriers & Field Probabilities
@@ -65,9 +65,8 @@
 //! normal probability that was assigned to it while computing the dynamic program.
 
 use crate::dataset::point::XYPoint;
-use crate::dp::multi::MultiDynamicProgram;
 use crate::dp::simple::SimpleDynamicProgram;
-use crate::dp::{DynamicProgram, DynamicProgramType};
+use crate::dp::{DynamicProgramPool, DynamicProgramType};
 use crate::kernel::Kernel;
 use num::Zero;
 use std::collections::HashMap;
@@ -151,9 +150,7 @@ impl DynamicProgramBuilder {
     /// Sets the type of the dynamic program as a
     /// [`MultiDynamicProgram`].
     pub fn multi(mut self) -> Self {
-        self.dp_type = Some(DynamicProgramType::Multi);
-
-        self
+        todo!();
     }
 
     /// Sets the type of the dynamic program to the specified
@@ -218,12 +215,12 @@ impl DynamicProgramBuilder {
     /// Builds the dynamic program.
     ///
     /// This builds the dynamic program after all options have been specified. Returns a
-    /// [`DynamicProgram`] if successful.
+    /// [`DynamicProgramPool`] if successful.
     ///
     /// # Errors
     ///
     /// Returns a [`DynamicProgramBuilderError`] if misconfigured.
-    pub fn build(self) -> Result<DynamicProgram, DynamicProgramBuilderError> {
+    pub fn build(self) -> Result<DynamicProgramPool, DynamicProgramBuilderError> {
         let Some(time_limit) = self.time_limit else {
             return Err(DynamicProgramBuilderError::NoTimeLimitSet);
         };
@@ -292,7 +289,7 @@ impl DynamicProgramBuilder {
                     }
                 }
 
-                Ok(DynamicProgram::Simple(SimpleDynamicProgram {
+                Ok(DynamicProgramPool::Single(SimpleDynamicProgram {
                     table: vec![
                         vec![vec![Zero::zero(); 2 * time_limit + 1]; 2 * time_limit + 1];
                         time_limit + 1
@@ -301,29 +298,6 @@ impl DynamicProgramBuilder {
                     kernels: kernels_mapped,
                     field_types,
                 }))
-            }
-            DynamicProgramType::Multi => {
-                todo!()
-                // if self.kernel.is_some() {
-                //     return Err(DynamicProgramBuilderError::SingleKernelForMulti);
-                // }
-                //
-                // let Some(kernels) = self.kernels else {
-                //     return Err(DynamicProgramBuilderError::NoKernelsSet);
-                // };
-                //
-                // Ok(DynamicProgram::Multi(MultiDynamicProgram {
-                //     table: vec![
-                //         vec![
-                //             vec![vec![Zero::zero(); 2 * time_limit + 1]; 2 * time_limit + 1];
-                //             kernels.len()
-                //         ];
-                //         time_limit + 1
-                //     ],
-                //     time_limit,
-                //     kernels,
-                //     field_probabilities,
-                // }))
             }
         }
     }

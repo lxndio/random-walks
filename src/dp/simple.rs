@@ -1,5 +1,5 @@
 use crate::dp::builder::DynamicProgramBuilder;
-use crate::dp::{DynamicProgram, DynamicPrograms};
+use crate::dp::{DynamicProgramPool, DynamicPrograms};
 use crate::kernel;
 use crate::kernel::Kernel;
 use anyhow::{bail, Context};
@@ -100,7 +100,7 @@ impl SimpleDynamicProgram {
     }
 
     #[cfg(feature = "saving")]
-    pub fn load(filename: String) -> anyhow::Result<DynamicProgram> {
+    pub fn load(filename: String) -> anyhow::Result<DynamicProgramPool> {
         let file = File::open(filename)?;
         let reader = BufReader::new(file);
         let mut decoder = Decoder::new(reader).context("could not create decoder")?;
@@ -111,7 +111,7 @@ impl SimpleDynamicProgram {
             Err(_) => bail!("could not read time limit from file"),
         };
 
-        let DynamicProgram::Simple(mut dp) = DynamicProgramBuilder::new()
+        let DynamicProgramPool::Single(mut dp) = DynamicProgramBuilder::new()
             .simple()
             .time_limit(time_limit as usize)
             .kernel(kernel!(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0))
@@ -139,7 +139,7 @@ impl SimpleDynamicProgram {
             }
         }
 
-        Ok(DynamicProgram::Simple(dp))
+        Ok(DynamicProgramPool::Single(dp))
     }
 }
 
@@ -457,7 +457,7 @@ impl Eq for SimpleDynamicProgram {}
 #[cfg(test)]
 mod tests {
     use crate::dp::builder::DynamicProgramBuilder;
-    use crate::dp::{DynamicProgram, DynamicPrograms};
+    use crate::dp::{DynamicProgramPool, DynamicPrograms};
     use crate::kernel::biased_rw::BiasedRwGenerator;
     use crate::kernel::simple_rw::SimpleRwGenerator;
     use crate::kernel::{Direction, Kernel};
@@ -473,7 +473,7 @@ mod tests {
 
         dp.compute();
 
-        let DynamicProgram::Simple(dp) = dp else {
+        let DynamicProgramPool::Single(dp) = dp else {
             unreachable!();
         };
 
@@ -489,7 +489,7 @@ mod tests {
             .build()
             .unwrap();
 
-        let DynamicProgram::Simple(mut dp) = dp else {
+        let DynamicProgramPool::Single(mut dp) = dp else {
             unreachable!();
         };
 
@@ -509,7 +509,7 @@ mod tests {
 
         dp.compute();
 
-        let DynamicProgram::Simple(dp) = dp else {
+        let DynamicProgramPool::Single(dp) = dp else {
             unreachable!();
         };
 
@@ -540,10 +540,10 @@ mod tests {
 
         dp2.compute();
 
-        let DynamicProgram::Simple(dp1) = dp1 else {
+        let DynamicProgramPool::Single(dp1) = dp1 else {
             unreachable!();
         };
-        let DynamicProgram::Simple(dp2) = dp2 else {
+        let DynamicProgramPool::Single(dp2) = dp2 else {
             unreachable!();
         };
 
@@ -576,10 +576,10 @@ mod tests {
 
         dp2.compute();
 
-        let DynamicProgram::Simple(dp1) = dp1 else {
+        let DynamicProgramPool::Single(dp1) = dp1 else {
             unreachable!();
         };
-        let DynamicProgram::Simple(dp2) = dp2 else {
+        let DynamicProgramPool::Single(dp2) = dp2 else {
             unreachable!();
         };
 

@@ -1,7 +1,7 @@
 //! Provides the basic data structure for a [`Walk`](Walk).
 //!
 //! A [`Walk`](Walk) can be created manually by specifying all of its points or generated using a
-//! [`DynamicProgram`](crate::dp::DynamicProgram). See the [`dp`](crate::dp) module for more
+//! [`DynamicProgram`](crate::dp::DynamicProgramPool). See the [`dp`](crate::dp) module for more
 //! information on how to generate random walks.
 //!
 //! The [`Walk`](Walk) structure also provides different useful functions for manipulating and

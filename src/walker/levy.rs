@@ -1,4 +1,4 @@
-use crate::dp::DynamicProgram;
+use crate::dp::DynamicProgramPool;
 use crate::walker::{Walk, Walker, WalkerError};
 use num::Zero;
 use rand::distributions::{WeightedError, WeightedIndex};
@@ -12,13 +12,13 @@ pub struct LevyWalker {
 impl Walker for LevyWalker {
     fn generate_path(
         &self,
-        dp: &DynamicProgram,
+        dp: &DynamicProgramPool,
         to_x: isize,
         to_y: isize,
         time_steps: usize,
     ) -> Result<Walk, WalkerError> {
-        let DynamicProgram::Simple(dp) = dp else {
-            return Err(WalkerError::WrongDynamicProgramType);
+        let DynamicProgramPool::Single(dp) = dp else {
+            return Err(WalkerError::RequiresSingleDynamicProgram);
         };
 
         let mut path = Vec::new();

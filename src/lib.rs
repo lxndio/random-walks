@@ -34,7 +34,7 @@
 //! kernels to compute the probabilities. This is for example required when using correlated
 //! random walks.
 //!
-//! Dynamic programs are wrapped into the [`DynamicProgram`](dp::DynamicProgram) enum and must
+//! Dynamic programs are wrapped into the [`DynamicProgram`](dp::DynamicProgramPool) enum and must
 //! implement the [`DynamicPrograms`](dp::DynamicPrograms) trait. They can be initialized using the
 //! [`DynamicProgramBuilder`](dp::builder::DynamicProgramBuilder).
 //!

@@ -5,14 +5,14 @@ pub mod levy;
 pub mod multi_step;
 pub mod standard;
 
-use crate::dp::DynamicProgram;
+use crate::dp::DynamicProgramPool;
 use crate::walk::Walk;
 use thiserror::Error;
 
 pub trait Walker {
     fn generate_path(
         &self,
-        dp: &DynamicProgram,
+        dp: &DynamicProgramPool,
         to_x: isize,
         to_y: isize,
         time_steps: usize,
@@ -20,7 +20,7 @@ pub trait Walker {
 
     fn generate_paths(
         &self,
-        dp: &DynamicProgram,
+        dp: &DynamicProgramPool,
         qty: usize,
         to_x: isize,
         to_y: isize,
@@ -40,8 +40,11 @@ pub trait Walker {
 
 #[derive(Error, Debug)]
 pub enum WalkerError {
-    #[error("wrong type of dynamic program given")]
-    WrongDynamicProgramType,
+    #[error("the walker requires a single dynamic program but multiple were given")]
+    RequiresSingleDynamicProgram,
+
+    #[error("the walker requires multiple dynamic programs but only a single one was given")]
+    RequiresMultipleDynamicPrograms,
 
     #[error("no path exists")]
     NoPathExists,

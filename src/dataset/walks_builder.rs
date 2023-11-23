@@ -1,7 +1,7 @@
 use crate::dataset::loader::CoordinateType;
 use crate::dataset::point::Coordinates;
 use crate::dataset::Dataset;
-use crate::dp::DynamicProgram;
+use crate::dp::DynamicProgramPool;
 use crate::walk::Walk;
 use crate::walker::Walker;
 use anyhow::Context;
@@ -35,7 +35,7 @@ pub enum TimeStepsBy {
 
 pub struct DatasetWalksBuilder<'a> {
     dataset: Option<&'a Dataset>,
-    dp: Option<&'a DynamicProgram>,
+    dp: Option<&'a DynamicProgramPool>,
     walker: Option<&'a Box<dyn Walker>>,
     from: usize,
     to: Option<usize>,
@@ -76,7 +76,7 @@ impl<'a> DatasetWalksBuilder<'a> {
         self
     }
 
-    pub fn dp(mut self, dp: &'a DynamicProgram) -> Self {
+    pub fn dp(mut self, dp: &'a DynamicProgramPool) -> Self {
         self.dp = Some(dp);
 
         self
