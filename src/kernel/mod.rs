@@ -11,6 +11,7 @@ pub mod biased_correlated_rw;
 pub mod biased_rw;
 pub mod correlated_rw;
 pub mod generator;
+pub mod normal_dist;
 pub mod simple_rw;
 
 #[derive(Clone)]
@@ -70,13 +71,13 @@ impl Kernel {
         })
     }
 
-    pub fn initialize(&mut self, size: usize) -> anyhow::Result<()> {
+    pub fn initialize(&mut self, size: usize) -> Result<(), KernelGeneratorError> {
         if size % 2 == 1 {
             self.probabilities = vec![vec![0.0; size]; size];
 
             Ok(())
         } else {
-            bail!("size must be odd");
+            Err(KernelGeneratorError::SizeEven)
         }
     }
 
@@ -146,15 +147,26 @@ impl Kernel {
 
 impl Debug for Kernel {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let mut res = format!("{}\n", self.name(false));
+        let mut res = String::new();
 
-        for y in 0..self.probabilities.len() {
-            res += "| ";
-
-            for x in 0..self.probabilities.len() {
-                res += &format!("{} ", self.probabilities[x][y]);
+        for y in 0..self.size() {
+            for x in 0..self.size() {
+                if x == self.size() / 2 && y == self.size() / 2 {
+                    res.remove(res.len() - 1);
+                    res += "[";
+                }
+                if self.probabilities[x][y] == 0.0 {
+                    res += "_._____";
+                } else {
+                    res += &format!("{:.5}", self.probabilities[x][y]);
+                }
+                if x == self.size() / 2 && y == self.size() / 2 {
+                    res += "]";
+                } else {
+                    res += " ";
+                }
             }
-            res += "|\n";
+            res += "\n";
         }
 
         f.write_str(res.as_str())

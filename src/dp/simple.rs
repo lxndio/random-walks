@@ -157,6 +157,10 @@ impl DynamicPrograms for DynamicProgram {
         let start = Instant::now();
 
         for t in 1..=limit_pos as usize {
+            if t % 50 == 0 {
+                println!("t: {t}");
+            }
+
             for x in limit_neg..=limit_pos {
                 for y in limit_neg..=limit_pos {
                     self.apply_kernel_at(x, y, t);

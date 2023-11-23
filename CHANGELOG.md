@@ -6,3 +6,5 @@
 - Field probabilities are removed in favor of field types 
 - `MultiDynamicProgram` is removed in favor of `DynamicProgramPool`
 - `SimpleDynamicProgram` is renamed to `DynamicProgram`
+- Add new kernel generator `NormalDistGenerator`
+- Fix debug output for `Kernel`

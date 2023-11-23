@@ -14,4 +14,6 @@ pub enum KernelGeneratorError {
     OneKernelRequired,
     #[error("multiple kernels required, not enough kernels were found")]
     NotEnoughKernels,
+    #[error("kernel size must be odd")]
+    SizeEven,
 }
