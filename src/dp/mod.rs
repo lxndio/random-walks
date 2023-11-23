@@ -82,7 +82,7 @@ pub trait DynamicPrograms {
 
     fn compute_parallel(&mut self);
 
-    fn field_probabilities(&self) -> Vec<Vec<f64>>;
+    fn field_types(&self) -> Vec<Vec<usize>>;
 
     #[cfg(feature = "plotting")]
     fn heatmap(&self, path: String, t: usize) -> anyhow::Result<()>;
@@ -128,8 +128,8 @@ impl DynamicPrograms for DynamicProgram {
         self.unwrap_mut().compute_parallel()
     }
 
-    fn field_probabilities(&self) -> Vec<Vec<f64>> {
-        self.unwrap().field_probabilities()
+    fn field_types(&self) -> Vec<Vec<usize>> {
+        self.unwrap().field_types()
     }
 
     #[cfg(feature = "plotting")]

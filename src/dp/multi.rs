@@ -1,14 +1,14 @@
-use std::ops::Range;
-use std::sync::{Arc, RwLock};
-use std::sync::mpsc::channel;
 use crate::dp::builder::DynamicProgramBuilder;
 use crate::dp::{DynamicProgram, DynamicPrograms};
 use crate::kernel;
 use crate::kernel::Kernel;
 use anyhow::{bail, Context};
+use std::ops::Range;
+use std::sync::mpsc::channel;
+use std::sync::{Arc, RwLock};
 use std::time::Instant;
-use workerpool::Pool;
 use workerpool::thunk::ThunkWorker;
+use workerpool::Pool;
 #[cfg(feature = "saving")]
 use {
     std::fs::File,
@@ -88,56 +88,7 @@ impl MultiDynamicProgram {
 
     #[cfg(feature = "saving")]
     pub fn load(filename: String) -> anyhow::Result<DynamicProgram> {
-        let file = File::open(filename)?;
-        let reader = BufReader::new(file);
-        let mut decoder = Decoder::new(reader).context("could not create decoder")?;
-
-        let mut time_limit = [0u8; 8];
-        let time_limit = match decoder.read_exact(&mut time_limit) {
-            Ok(()) => u64::from_le_bytes(time_limit),
-            Err(_) => bail!("could not read time limit from file"),
-        };
-
-        let mut variants = [0u8; 8];
-        let variants = match decoder.read_exact(&mut variants) {
-            Ok(()) => u64::from_le_bytes(variants) as usize,
-            Err(_) => bail!("could not read number of variants from file"),
-        };
-
-        let DynamicProgram::Multi(mut dp) = DynamicProgramBuilder::new()
-            .multi()
-            .time_limit(time_limit as usize)
-            .kernels(vec![
-                kernel!(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
-                variants
-            ])
-            .build()?
-        else {
-            unreachable!();
-        };
-
-        let (limit_neg, limit_pos) = dp.limits();
-        let mut buf = [0u8; 8];
-
-        for t in 0..=limit_pos as usize {
-            for variant in 0..variants {
-                for x in limit_neg..=limit_pos {
-                    for y in limit_neg..=limit_pos {
-                        decoder.read_exact(&mut buf)?;
-                        dp.set(x, y, t, variant, f64::from_le_bytes(buf));
-                    }
-                }
-            }
-        }
-
-        for x in limit_neg..=limit_pos {
-            for y in limit_neg..=limit_pos {
-                decoder.read_exact(&mut buf)?;
-                dp.field_probability_set(x, y, f64::from_le_bytes(buf));
-            }
-        }
-
-        Ok(DynamicProgram::Multi(dp))
+        unimplemented!();
     }
 }
 
@@ -172,8 +123,8 @@ impl DynamicPrograms for MultiDynamicProgram {
         todo!()
     }
 
-    fn field_probabilities(&self) -> Vec<Vec<f64>> {
-        self.field_probabilities.clone()
+    fn field_types(&self) -> Vec<Vec<usize>> {
+        unimplemented!();
     }
 
     #[cfg(feature = "plotting")]

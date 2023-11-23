@@ -9,8 +9,7 @@ use plotters::prelude::*;
 use std::fmt::Debug;
 use std::ops::{DerefMut, Range};
 use std::sync::mpsc::channel;
-use std::sync::{Arc, Mutex, RwLock};
-use std::thread;
+use std::sync::{Arc, RwLock};
 use std::time::Instant;
 use workerpool::thunk::{Thunk, ThunkWorker};
 use workerpool::Pool;
@@ -23,10 +22,10 @@ use {
 };
 
 pub struct SimpleDynamicProgram {
-    pub table: Vec<Vec<Vec<f64>>>, // TODO make pub(crate) again
+    pub(crate) table: Vec<Vec<Vec<f64>>>,
     pub(crate) time_limit: usize,
-    pub(crate) kernel: Kernel,
-    pub(crate) field_probabilities: Vec<Vec<f64>>,
+    pub(crate) kernels: Vec<Kernel>,
+    pub(crate) field_types: Vec<Vec<usize>>,
 }
 
 impl SimpleDynamicProgram {
@@ -58,7 +57,10 @@ impl SimpleDynamicProgram {
     }
 
     fn apply_kernel_at(&mut self, x: isize, y: isize, t: usize) {
-        let ks = (self.kernel.size() / 2) as isize;
+        let field_type = self.field_type_at(x, y);
+        let kernel = self.kernels[field_type].clone();
+
+        let ks = (kernel.size() / 2) as isize;
         let (limit_neg, limit_pos) = self.limits();
         let mut sum = 0.0;
 
@@ -76,25 +78,25 @@ impl SimpleDynamicProgram {
                 let kernel_x = x - i;
                 let kernel_y = y - j;
 
-                sum += self.at(i, j, t - 1) * self.kernel.at(kernel_x, kernel_y);
+                sum += self.at(i, j, t - 1) * kernel.at(kernel_x, kernel_y);
             }
         }
 
-        self.set(x, y, t, sum * self.field_probability_at(x, y));
+        self.set(x, y, t, sum);
     }
 
-    fn field_probability_at(&self, x: isize, y: isize) -> f64 {
+    fn field_type_at(&self, x: isize, y: isize) -> usize {
         let x = (self.time_limit as isize + x) as usize;
         let y = (self.time_limit as isize + y) as usize;
 
-        self.field_probabilities[x][y]
+        self.field_types[x][y]
     }
 
-    fn field_probability_set(&mut self, x: isize, y: isize, val: f64) {
+    fn field_type_set(&mut self, x: isize, y: isize, val: usize) {
         let x = (self.time_limit as isize + x) as usize;
         let y = (self.time_limit as isize + y) as usize;
 
-        self.field_probabilities[x][y] = val;
+        self.field_types[x][y] = val;
     }
 
     #[cfg(feature = "saving")]
@@ -133,7 +135,7 @@ impl SimpleDynamicProgram {
         for x in limit_neg..=limit_pos {
             for y in limit_neg..=limit_pos {
                 decoder.read_exact(&mut buf)?;
-                dp.field_probability_set(x, y, f64::from_le_bytes(buf));
+                dp.field_type_set(x, y, u64::from_le_bytes(buf) as usize);
             }
         }
 
@@ -169,8 +171,8 @@ impl DynamicPrograms for SimpleDynamicProgram {
 
     fn compute_parallel(&mut self) {
         let (limit_neg, limit_pos) = self.limits();
-        let kernel = Arc::new(RwLock::new(self.kernel.clone()));
-        let field_probabilities = Arc::new(RwLock::new(self.field_probabilities.clone()));
+        let kernels = Arc::new(RwLock::new(self.kernels.clone()));
+        let field_types = Arc::new(RwLock::new(self.field_types.clone()));
         let pool = Pool::<ThunkWorker<(Range<isize>, Range<isize>, Vec<Vec<f64>>)>>::new(10);
         let (tx, rx) = channel();
 
@@ -200,8 +202,8 @@ impl DynamicPrograms for SimpleDynamicProgram {
             let table_old = Arc::new(RwLock::new(self.table[t - 1].clone()));
 
             for (x_range, y_range) in chunks.clone() {
-                let kernel = kernel.clone();
-                let field_probabilities = field_probabilities.clone();
+                let kernels = kernels.clone();
+                let field_types = field_types.clone();
                 let table_old = table_old.clone();
 
                 pool.execute_to(
@@ -214,12 +216,11 @@ impl DynamicPrograms for SimpleDynamicProgram {
                             for y in y_range.clone() {
                                 probs[i][j] = apply_kernel(
                                     &table_old.read().unwrap(),
-                                    &kernel.read().unwrap(),
-                                    &field_probabilities.read().unwrap(),
+                                    &kernels.read().unwrap(),
+                                    &field_types.read().unwrap(),
                                     (limit_neg, limit_pos),
                                     x,
                                     y,
-                                    t,
                                 );
 
                                 j += 1;
@@ -257,8 +258,8 @@ impl DynamicPrograms for SimpleDynamicProgram {
     }
 
     #[cfg(not(tarpaulin_include))]
-    fn field_probabilities(&self) -> Vec<Vec<f64>> {
-        self.field_probabilities.clone()
+    fn field_types(&self) -> Vec<Vec<usize>> {
+        self.field_types.clone()
     }
 
     #[cfg(not(tarpaulin_include))]
@@ -353,7 +354,7 @@ impl DynamicPrograms for SimpleDynamicProgram {
 
         for x in limit_neg..=limit_pos {
             for y in limit_neg..=limit_pos {
-                encoder.write(&self.field_probability_at(x, y).to_le_bytes())?;
+                encoder.write(&(self.field_type_at(x, y) as u64).to_le_bytes())?;
             }
         }
 
@@ -363,13 +364,15 @@ impl DynamicPrograms for SimpleDynamicProgram {
 
 fn apply_kernel(
     table_old: &Vec<Vec<f64>>,
-    kernel: &Kernel,
-    field_probabilities: &Vec<Vec<f64>>,
+    kernels: &Vec<Kernel>,
+    field_types: &Vec<Vec<usize>>,
     (limit_neg, limit_pos): (isize, isize),
     x: isize,
     y: isize,
-    t: usize,
 ) -> f64 {
+    let field_type = field_types[(limit_pos + x) as usize][(limit_pos + y) as usize];
+    let kernel = kernels[field_type].clone();
+
     let ks = (kernel.size() / 2) as isize;
     let mut sum = 0.0;
 
@@ -392,7 +395,7 @@ fn apply_kernel(
         }
     }
 
-    sum * field_probabilities[(limit_pos + x) as usize][(limit_pos + y) as usize]
+    sum
 }
 
 // fn apply_kernel(
@@ -445,7 +448,7 @@ impl PartialEq for SimpleDynamicProgram {
     fn eq(&self, other: &Self) -> bool {
         self.time_limit == other.time_limit
             && self.table == other.table
-            && self.field_probabilities == other.field_probabilities
+            && self.field_types == other.field_types
     }
 }
 
@@ -496,45 +499,17 @@ mod tests {
     }
 
     #[test]
-    #[rustfmt::skip]
-    fn test_simple_dp_apply_kernel_at() {
-        let mut fps = vec![vec![1.0; 21]; 21];
-
-        fps[10][10] = 0.75;
-
-        let dp = DynamicProgramBuilder::new()
-            .simple()
-            .time_limit(10)
-            .kernel(Kernel::from_generator(SimpleRwGenerator).unwrap())
-            .field_probabilities(fps)
-            .build()
-            .unwrap();
-
-        let DynamicProgram::Simple(mut dp) = dp else {
-            unreachable!();
-        };
-
-        dp.set(0, 0, 0, 0.5);
-        dp.set(-1, 0, 0, 0.5);
-        dp.apply_kernel_at(0, 0, 1);
-
-        let rounded_res = format!("{:.2}", dp.at(0, 0, 1)).parse::<f64>().unwrap();
-
-        assert_eq!(rounded_res, 0.15);
-    }
-
-    #[test]
     fn test_compute() {
         let mut dp = DynamicProgramBuilder::new()
             .simple()
-            .time_limit(1)
+            .time_limit(100)
             .kernel(Kernel::from_generator(SimpleRwGenerator).unwrap())
             .build()
             .unwrap();
 
         dp.compute();
 
-        let DynamicProgram::Simple(mut dp) = dp else {
+        let DynamicProgram::Simple(dp) = dp else {
             unreachable!();
         };
 
@@ -565,10 +540,10 @@ mod tests {
 
         dp2.compute();
 
-        let DynamicProgram::Simple(mut dp1) = dp1 else {
+        let DynamicProgram::Simple(dp1) = dp1 else {
             unreachable!();
         };
-        let DynamicProgram::Simple(mut dp2) = dp2 else {
+        let DynamicProgram::Simple(dp2) = dp2 else {
             unreachable!();
         };
 
@@ -601,10 +576,10 @@ mod tests {
 
         dp2.compute();
 
-        let DynamicProgram::Simple(mut dp1) = dp1 else {
+        let DynamicProgram::Simple(dp1) = dp1 else {
             unreachable!();
         };
-        let DynamicProgram::Simple(mut dp2) = dp2 else {
+        let DynamicProgram::Simple(dp2) = dp2 else {
             unreachable!();
         };
 
