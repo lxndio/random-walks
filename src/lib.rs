@@ -154,3 +154,4 @@ pub mod dp;
 pub mod kernel;
 pub mod walk;
 pub mod walker;
+pub mod vec2d;
