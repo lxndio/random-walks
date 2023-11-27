@@ -2,6 +2,7 @@ use crate::dp::builder::DynamicProgramBuilder;
 use crate::dp::{DynamicProgramPool, DynamicPrograms};
 use crate::kernel;
 use crate::kernel::Kernel;
+use crate::vec2d::{Vec2d, Vec2dSlice, Vec2dSliceMut};
 use anyhow::{bail, Context};
 use num::Zero;
 #[cfg(feature = "plotting")]
@@ -22,7 +23,7 @@ use {
 };
 
 pub struct DynamicProgram {
-    pub(crate) table: Vec<Vec<Vec<f64>>>,
+    pub(crate) table: Vec<Vec2d<'static, f64>>,
     pub(crate) time_limit: usize,
     pub(crate) kernels: Vec<Kernel>,
     pub(crate) field_types: Vec<Vec<usize>>,
@@ -33,7 +34,7 @@ impl DynamicProgram {
         let x = (self.time_limit as isize + x) as usize;
         let y = (self.time_limit as isize + y) as usize;
 
-        self.table[t][x][y]
+        self.table[t][(x, y)]
     }
 
     pub fn at_or(&self, x: isize, y: isize, t: usize, default: f64) -> f64 {
@@ -43,7 +44,7 @@ impl DynamicProgram {
             let x = (self.time_limit as isize + x) as usize;
             let y = (self.time_limit as isize + y) as usize;
 
-            self.table[t][x][y]
+            self.table[t][(x, y)]
         } else {
             default
         }
@@ -53,7 +54,7 @@ impl DynamicProgram {
         let x = (self.time_limit as isize + x) as usize;
         let y = (self.time_limit as isize + y) as usize;
 
-        self.table[t][x][y] = val;
+        self.table[t][(x, y)] = val;
     }
 
     fn apply_kernel_at(&mut self, x: isize, y: isize, t: usize) {
@@ -177,83 +178,109 @@ impl DynamicPrograms for DynamicProgram {
         let (limit_neg, limit_pos) = self.limits();
         let kernels = Arc::new(RwLock::new(self.kernels.clone()));
         let field_types = Arc::new(RwLock::new(self.field_types.clone()));
-        let pool = Pool::<ThunkWorker<(Range<isize>, Range<isize>, Vec<Vec<f64>>)>>::new(10);
-        let (tx, rx) = channel();
-
-        // Define chunks
-
-        let chunk_size = ((self.time_limit + 1) / 3) as isize;
-        let mut ranges = Vec::new();
-
-        for i in 0..3 - 1 {
-            ranges.push((limit_neg + i * chunk_size..limit_neg + (i + 1) * chunk_size));
-        }
-
-        ranges.push(limit_neg + 2 * chunk_size..limit_pos + 1);
-        let mut chunks = Vec::new();
-
-        for x in 0..3 {
-            for y in 0..3 {
-                chunks.push((ranges[x].clone(), ranges[y].clone()));
-            }
-        }
 
         self.set(0, 0, 0, 1.0);
 
         let start = Instant::now();
 
         for t in 1..=limit_pos as usize {
-            let table_old = Arc::new(RwLock::new(self.table[t - 1].clone()));
+            let tables = self.table.split_at_mut(t);
+            let table_current = &mut tables.1[0];
+            let table_old = &mut tables.0[t - 1];
 
-            for (x_range, y_range) in chunks.clone() {
-                let kernels = kernels.clone();
-                let field_types = field_types.clone();
-                let table_old = table_old.clone();
+            let (mut l, mut r) = table_current.split_x_mut(limit_pos as usize);
+            let (mut tl, mut bl) = l.split_y_mut(limit_pos as usize);
+            let (mut tr, mut br) = r.split_y_mut(limit_pos as usize);
 
-                pool.execute_to(
-                    tx.clone(),
-                    Thunk::of(move || {
-                        let mut probs = vec![vec![0.0; y_range.len()]; x_range.len()];
-                        let (mut i, mut j) = (0, 0);
+            let (mut l_old, mut r_old) = table_old.split_x_mut(limit_pos as usize);
+            let (tl_old, bl_old) = l_old.split_y_mut(limit_pos as usize);
+            let (tr_old, br_old) = r_old.split_y_mut(limit_pos as usize);
 
-                        for x in x_range.clone() {
-                            for y in y_range.clone() {
-                                probs[i][j] = apply_kernel(
-                                    &table_old.read().unwrap(),
-                                    &kernels.read().unwrap(),
-                                    &field_types.read().unwrap(),
-                                    (limit_neg, limit_pos),
-                                    x,
-                                    y,
-                                );
+            std::thread::scope(|s| {
+                let kernels_thread = kernels.clone();
+                let field_types_thread = field_types.clone();
 
-                                j += 1;
-                            }
-
-                            i += 1;
-                            j = 0;
+                s.spawn(move || {
+                    for x in 0..tl.width() as isize {
+                        for y in 0..tl.height() as isize {
+                            apply_kernel(
+                                &mut tl,
+                                &tl_old,
+                                kernels_thread.clone(),
+                                field_types_thread.clone(),
+                                (limit_neg, limit_pos),
+                                x,
+                                y,
+                                0,
+                                0,
+                            );
                         }
-
-                        (x_range.clone(), y_range.clone(), probs)
-                    }),
-                );
-            }
-
-            for (x_range, y_range, probs) in rx.iter().take(9) {
-                let (mut i, mut j) = (0, 0);
-
-                for x in x_range.clone() {
-                    for y in y_range.clone() {
-                        self.table[t][(self.time_limit as isize + x) as usize]
-                            [(self.time_limit as isize + y) as usize] = probs[i][j];
-
-                        j += 1;
                     }
+                });
 
-                    i += 1;
-                    j = 0;
-                }
-            }
+                let kernels_thread = kernels.clone();
+                let field_types_thread = field_types.clone();
+
+                s.spawn(move || {
+                    for x in 0..tr.width() as isize {
+                        for y in 0..tr.height() as isize {
+                            apply_kernel(
+                                &mut tr,
+                                &tr_old,
+                                kernels_thread.clone(),
+                                field_types_thread.clone(),
+                                (limit_neg, limit_pos),
+                                x,
+                                y,
+                                limit_pos,
+                                0,
+                            );
+                        }
+                    }
+                });
+
+                let kernels_thread = kernels.clone();
+                let field_types_thread = field_types.clone();
+
+                s.spawn(move || {
+                    for x in 0..bl.width() as isize {
+                        for y in 0..bl.height() as isize {
+                            apply_kernel(
+                                &mut bl,
+                                &bl_old,
+                                kernels_thread.clone(),
+                                field_types_thread.clone(),
+                                (limit_neg, limit_pos),
+                                x,
+                                y,
+                                0,
+                                limit_pos,
+                            );
+                        }
+                    }
+                });
+
+                let kernels_thread = kernels.clone();
+                let field_types_thread = field_types.clone();
+
+                s.spawn(move || {
+                    for x in 0..br.width() as isize {
+                        for y in 0..br.height() as isize {
+                            apply_kernel(
+                                &mut br,
+                                &br_old,
+                                kernels_thread.clone(),
+                                field_types_thread.clone(),
+                                (limit_neg, limit_pos),
+                                x,
+                                y,
+                                limit_pos,
+                                limit_pos,
+                            );
+                        }
+                    }
+                });
+            });
         }
 
         let duration = start.elapsed();
@@ -269,64 +296,66 @@ impl DynamicPrograms for DynamicProgram {
     #[cfg(not(tarpaulin_include))]
     #[cfg(feature = "plotting")]
     fn heatmap(&self, path: String, t: usize) -> anyhow::Result<()> {
-        let (limit_neg, limit_pos) = self.limits();
-        let coordinate_range = limit_neg as i32..(limit_pos + 1) as i32;
+        todo!();
 
-        let root = BitMapBackend::new(&path, (1000, 1000)).into_drawing_area();
-        root.fill(&WHITE).unwrap();
-        let root = root.margin(10, 10, 10, 10);
-
-        let mut chart = ChartBuilder::on(&root)
-            .caption(format!("Heatmap for t = {}", t), ("sans-serif", 20))
-            .x_label_area_size(40)
-            .y_label_area_size(40)
-            .build_cartesian_2d(coordinate_range.clone(), coordinate_range.clone())?;
-
-        chart.configure_mesh().draw()?;
-
-        let iter = self.table[t].iter().enumerate().flat_map(|(x, l)| {
-            l.iter()
-                .enumerate()
-                .map(move |(y, v)| (x as i32 - limit_pos as i32, y as i32 - limit_pos as i32, v))
-        });
-
-        let min = iter
-            .clone()
-            .min_by(|(_, _, v1), (_, _, v2)| v1.total_cmp(v2))
-            .context("Could not compute minimum value")?
-            .2;
-        let max = iter
-            .clone()
-            .max_by(|(_, _, v1), (_, _, v2)| v1.total_cmp(v2))
-            .context("Could not compute minimum value")?
-            .2;
-
-        chart.draw_series(PointSeries::of_element(iter, 1, &BLACK, &|c, s, _st| {
-            Rectangle::new(
-                [(c.0, c.1), (c.0 + s, c.1 + s)],
-                HSLColor(
-                    (*c.2 - min) / (max - min),
-                    0.7,
-                    if c.2.is_zero() {
-                        0.0
-                    } else {
-                        ((*c.2 - min).ln_1p() / (max - min).ln_1p()).clamp(0.1, 1.0)
-                    },
-                )
-                .filled(),
-            )
-        }))?;
-
-        root.present()?;
-
-        Ok(())
+        // let (limit_neg, limit_pos) = self.limits();
+        // let coordinate_range = limit_neg as i32..(limit_pos + 1) as i32;
+        //
+        // let root = BitMapBackend::new(&path, (1000, 1000)).into_drawing_area();
+        // root.fill(&WHITE).unwrap();
+        // let root = root.margin(10, 10, 10, 10);
+        //
+        // let mut chart = ChartBuilder::on(&root)
+        //     .caption(format!("Heatmap for t = {}", t), ("sans-serif", 20))
+        //     .x_label_area_size(40)
+        //     .y_label_area_size(40)
+        //     .build_cartesian_2d(coordinate_range.clone(), coordinate_range.clone())?;
+        //
+        // chart.configure_mesh().draw()?;
+        //
+        // let iter = self.table[t].iter().enumerate().flat_map(|(x, l)| {
+        //     l.iter()
+        //         .enumerate()
+        //         .map(move |(y, v)| (x as i32 - limit_pos as i32, y as i32 - limit_pos as i32, v))
+        // });
+        //
+        // let min = iter
+        //     .clone()
+        //     .min_by(|(_, _, v1), (_, _, v2)| v1.total_cmp(v2))
+        //     .context("Could not compute minimum value")?
+        //     .2;
+        // let max = iter
+        //     .clone()
+        //     .max_by(|(_, _, v1), (_, _, v2)| v1.total_cmp(v2))
+        //     .context("Could not compute minimum value")?
+        //     .2;
+        //
+        // chart.draw_series(PointSeries::of_element(iter, 1, &BLACK, &|c, s, _st| {
+        //     Rectangle::new(
+        //         [(c.0, c.1), (c.0 + s, c.1 + s)],
+        //         HSLColor(
+        //             (*c.2 - min) / (max - min),
+        //             0.7,
+        //             if c.2.is_zero() {
+        //                 0.0
+        //             } else {
+        //                 ((*c.2 - min).ln_1p() / (max - min).ln_1p()).clamp(0.1, 1.0)
+        //             },
+        //         )
+        //         .filled(),
+        //     )
+        // }))?;
+        //
+        // root.present()?;
+        //
+        // Ok(())
     }
 
     #[cfg(not(tarpaulin_include))]
     fn print(&self, t: usize) {
         for y in 0..2 * self.time_limit + 1 {
             for x in 0..2 * self.time_limit + 1 {
-                print!("{} ", self.table[t][x][y]);
+                print!("{} ", self.table[t][(x, y)]);
             }
 
             println!();
@@ -367,26 +396,32 @@ impl DynamicPrograms for DynamicProgram {
 }
 
 fn apply_kernel(
-    table_old: &Vec<Vec<f64>>,
-    kernels: &Vec<Kernel>,
-    field_types: &Vec<Vec<usize>>,
+    table: &mut Vec2dSliceMut<f64>,
+    table_old: &Vec2dSlice<f64>,
+    kernels: Arc<RwLock<Vec<Kernel>>>,
+    field_types: Arc<RwLock<Vec<Vec<usize>>>>,
     (limit_neg, limit_pos): (isize, isize),
     x: isize,
     y: isize,
-) -> f64 {
-    let field_type = field_types[(limit_pos + x) as usize][(limit_pos + y) as usize];
+    offset_x: isize,
+    offset_y: isize,
+) {
+    let kernels = kernels.read().unwrap();
+    let field_types = field_types.read().unwrap();
+
+    let field_type = field_types[(offset_x + x) as usize][(offset_y + y) as usize];
     let kernel = kernels[field_type].clone();
 
     let ks = (kernel.size() / 2) as isize;
     let mut sum = 0.0;
 
     for i in x - ks..=x + ks {
-        if i < limit_neg || i > limit_pos {
+        if i < 0 || i >= table.width() as isize {
             continue;
         }
 
         for j in y - ks..=y + ks {
-            if j < limit_neg || j > limit_pos {
+            if j < 0 || j >= table.height() as isize {
                 continue;
             }
 
@@ -394,12 +429,11 @@ fn apply_kernel(
             let kernel_x = x - i;
             let kernel_y = y - j;
 
-            sum += table_old[(limit_pos + i) as usize][(limit_pos + j) as usize]
-                * kernel.at(kernel_x, kernel_y);
+            sum += table_old[(i as usize, j as usize)] * kernel.at(kernel_x, kernel_y);
         }
     }
 
-    sum
+    table[(x as usize, y as usize)] = sum;
 }
 
 // fn apply_kernel(

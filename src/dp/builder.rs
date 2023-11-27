@@ -68,6 +68,7 @@ use crate::dataset::point::XYPoint;
 use crate::dp::simple::DynamicProgram;
 use crate::dp::{DynamicProgramPool, DynamicProgramType};
 use crate::kernel::Kernel;
+use crate::vec2d::Vec2d;
 use num::Zero;
 use std::collections::HashMap;
 use thiserror::Error;
@@ -282,10 +283,7 @@ impl DynamicProgramBuilder {
                 }
 
                 Ok(DynamicProgramPool::Single(DynamicProgram {
-                    table: vec![
-                        vec![vec![Zero::zero(); 2 * time_limit + 1]; 2 * time_limit + 1];
-                        time_limit + 1
-                    ],
+                    table: vec![Vec2d::new(2 * time_limit + 1, 2 * time_limit + 1); time_limit + 1],
                     time_limit,
                     kernels: kernels_mapped,
                     field_types,

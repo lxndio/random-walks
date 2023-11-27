@@ -152,6 +152,6 @@
 pub mod dataset;
 pub mod dp;
 pub mod kernel;
+pub mod vec2d;
 pub mod walk;
 pub mod walker;
-pub mod vec2d;

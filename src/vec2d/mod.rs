@@ -77,7 +77,7 @@ pub struct Vec2dSliceMut<'a, T> {
     /// The backing 2D vector.
     v: &'a mut [T],
     /// The x offset of the slice in the backing 2D vector
-    x_offset: usize,
+    pub x_offset: usize,
     /// The y offset of the slice in the backing 2D vector
     y_offset: usize,
     /// The width of the slice
