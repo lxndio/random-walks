@@ -1,4 +1,4 @@
-# 0.1.1 (2023-XX-XX)
+# 0.2.0 (2023-XX-XX)
 
 - `SimpleDynamicProgram` now takes a type for each field to apply a corresponding kernel
 - `DynamicProgramBuilder` has been modified accordingly to support passing different kernels for different field types

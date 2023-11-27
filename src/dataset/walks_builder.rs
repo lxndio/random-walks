@@ -226,7 +226,7 @@ impl<'a> DatasetWalksBuilder<'a> {
                     let point1 = dataset.get(i).unwrap().clone().point;
                     let point2 = dataset.get(i + 1).unwrap().clone().point;
 
-                    let (x1, y1): (i64, i64) = (point1.x(), point1.y());
+                    let (x1, y1): (i64, i64) = (point1.x(), point1.y());                                                                                                                                                                              
                     let (x2, y2): (i64, i64) = (point2.x(), point2.y());
 
                     let dist = (x1 - x2).abs() + (y1 - y2).abs();
