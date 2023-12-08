@@ -1,4 +1,5 @@
 use crate::dp::DynamicProgramPool;
+use crate::kernel::Kernel;
 use crate::walker::{Walk, Walker, WalkerError};
 use num::Zero;
 use rand::distributions::{WeightedError, WeightedIndex};
@@ -6,6 +7,7 @@ use rand::prelude::*;
 
 pub struct MultiStepWalker {
     pub max_step_size: usize,
+    pub kernel: Kernel,
 }
 
 impl Walker for MultiStepWalker {
@@ -38,14 +40,21 @@ impl Walker for MultiStepWalker {
 
             for i in x - max_step_size..=x + max_step_size {
                 for j in y - max_step_size..=y + max_step_size {
-                    prev_probs.push(dp.at_or(i, j, t - 1, 0.0));
+                    let p_b = dp.at_or(i, j, t - 1, 0.0);
+                    let p_a = dp.at_or(x, y, t, 0.0);
+                    let p_a_b = self.kernel.at(i - x, j - y);
+
+                    prev_probs.push((p_a_b * p_b) / p_a);
                     movements.push((i - x, j - y));
                 }
             }
 
             let direction = match WeightedIndex::new(prev_probs) {
                 Ok(dist) => dist.sample(&mut rng),
-                Err(WeightedError::AllWeightsZero) => return Err(WalkerError::InconsistentPath),
+                Err(WeightedError::AllWeightsZero) => {
+                    eprintln!("time step: {t}, x: {x}, y: {y}");
+                    return Err(WalkerError::InconsistentPath);
+                }
                 _ => return Err(WalkerError::RandomDistributionError),
             };
             let (dx, dy) = movements[direction];

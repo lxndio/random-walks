@@ -1,4 +1,5 @@
 use crate::dp::DynamicProgramPool;
+use crate::kernel::Kernel;
 use crate::walker::{Walk, Walker, WalkerError};
 use num::Zero;
 use rand::distributions::{WeightedError, WeightedIndex};
@@ -7,6 +8,7 @@ use rand::prelude::*;
 pub struct LevyWalker {
     pub jump_probability: f64,
     pub jump_distance: usize,
+    pub kernel: Kernel,
 }
 
 impl Walker for LevyWalker {
@@ -35,21 +37,31 @@ impl Walker for LevyWalker {
 
             // Check if jump happens here
             let distance = if thread_rng().gen_range(0f64..1f64) <= self.jump_probability {
-                self.jump_distance
+                self.jump_distance as isize
             } else {
                 1
             };
 
-            let mut prev_probs = vec![
-                dp.at(x - distance as isize, y, t - 1), // West
-                dp.at(x, y - distance as isize, t - 1), // North
-                dp.at(x + distance as isize, y, t - 1), // East
-                dp.at(x, y + distance as isize, t - 1), // South
-            ];
+            let neighbors = [(-distance, 0), (0, -distance), (distance, 0), (0, distance)];
+            let mut prev_probs = Vec::new();
+
+            for (mov_x, mov_y) in neighbors.iter() {
+                let (i, j) = (x + mov_x, y + mov_y);
+
+                let p_b = dp.at_or(i, j, t - 1, 0.0);
+                let p_a = dp.at_or(x, y, t, 0.0);
+                let p_a_b = self.kernel.at(i - x, j - y);
+
+                prev_probs.push((p_a_b * p_b) / p_a);
+            }
 
             // Only allow staying if no jump occurs
             if distance == 1 {
-                prev_probs.push(dp.at(x, y, t - 1)); // Stay
+                let p_b = dp.at_or(x, y, t - 1, 0.0);
+                let p_a = dp.at_or(x, y, t, 0.0);
+                let p_a_b = self.kernel.at(0, 0);
+
+                prev_probs.push((p_a_b * p_b) / p_a);
             }
 
             let direction = match WeightedIndex::new(prev_probs) {

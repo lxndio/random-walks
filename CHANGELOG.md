@@ -8,3 +8,5 @@
 - `SimpleDynamicProgram` is renamed to `DynamicProgram`
 - Add new kernel generator `NormalDistGenerator`
 - Fix debug output for `Kernel`
+- Add `LandCoverWalker`
+- Fix computation error in Walkers

@@ -1,6 +1,7 @@
 //! Provides walkers used to generate random walks by using a dynamic program.
 
 pub mod correlated;
+pub mod land_cover;
 pub mod levy;
 pub mod multi_step;
 pub mod standard;

@@ -1,11 +1,14 @@
 use crate::dp::DynamicProgramPool;
+use crate::kernel::Kernel;
 use crate::walker::{Walk, Walker, WalkerError};
 use num::Zero;
 use rand::distributions::{WeightedError, WeightedIndex};
 use rand::prelude::Distribution;
 use rand::Rng;
 
-pub struct CorrelatedWalker;
+pub struct CorrelatedWalker {
+    pub kernels: Vec<Kernel>,
+}
 
 impl Walker for CorrelatedWalker {
     fn generate_path(
@@ -57,13 +60,18 @@ impl Walker for CorrelatedWalker {
                 _ => panic!("Invalid last direction. This should not happen."),
             };
 
-            let prev_probs = [
-                dp[variant].at(x, y, t - 1),
-                dp[variant].at(x - 1, y, t - 1),
-                dp[variant].at(x, y - 1, t - 1),
-                dp[variant].at(x + 1, y, t - 1),
-                dp[variant].at(x, y + 1, t - 1),
-            ];
+            let neighbors = [(0, 0), (-1, 0), (0, -1), (1, 0), (0, 1)];
+            let mut prev_probs = Vec::new();
+
+            for (mov_x, mov_y) in neighbors.iter() {
+                let (i, j) = (x + mov_x, y + mov_y);
+
+                let p_b = dp[variant].at_or(i, j, t - 1, 0.0);
+                let p_a = dp[variant].at_or(x, y, t, 0.0);
+                let p_a_b = self.kernels[variant].at(i - x, j - y);
+
+                prev_probs.push((p_a_b * p_b) / p_a);
+            }
 
             let direction = match WeightedIndex::new(prev_probs) {
                 Ok(dist) => dist.sample(&mut rng),

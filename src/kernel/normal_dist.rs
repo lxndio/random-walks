@@ -32,8 +32,8 @@ impl KernelGenerator for NormalDistGenerator {
         let cov = vec![self.diffusion, 0.0, 0.0, self.diffusion];
         let distribution = MultivariateNormal::new(mean, cov).unwrap();
 
-        for x in 0..21 {
-            for y in 0..21 {
+        for x in 0..self.size {
+            for y in 0..self.size {
                 kernel.probabilities[x][y] = distribution.pdf(&vec![x as f64, y as f64].into());
             }
         }
@@ -41,8 +41,8 @@ impl KernelGenerator for NormalDistGenerator {
         // Normalize values so that they sum up to 1.0
         let sum: f64 = kernel.probabilities.iter().flatten().sum();
 
-        for x in 0..21 {
-            for y in 0..21 {
+        for x in 0..self.size {
+            for y in 0..self.size {
                 kernel.probabilities[x][y] /= sum;
             }
         }
