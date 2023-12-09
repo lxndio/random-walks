@@ -63,7 +63,7 @@ pub fn benchmark_dp_2(c: &mut Criterion) {
 // DP with varying time limits, NormalDist kernel varying sizes
 pub fn benchmark_dp_3(c: &mut Criterion) {
     let time_limits = (200..=400).step_by(100);
-    let kernel_sizes = (3..=21);
+    let kernel_sizes = (3..=21).step_by(2);
 
     for time_limit in time_limits {
         let mut group = c.benchmark_group(format!("DP_{}_NormalDist_vs", time_limit));
