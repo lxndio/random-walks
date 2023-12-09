@@ -99,4 +99,3 @@ criterion_group!(
     benchmark_dp_2,
     benchmark_dp_3,
 );
-criterion_main!(benchmarks_dp);
