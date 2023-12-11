@@ -4,101 +4,65 @@ use randomwalks_lib::dp::DynamicPrograms;
 use randomwalks_lib::kernel::normal_dist::NormalDistGenerator;
 use randomwalks_lib::kernel::simple_rw::SimpleRwGenerator;
 use randomwalks_lib::kernel::Kernel;
+use randomwalks_lib::walker::multi_step::MultiStepWalker;
+use randomwalks_lib::walker::standard::StandardWalker;
+use randomwalks_lib::walker::Walker;
 
-// DPs with varying time limit, SRW kernel
-pub fn benchmark_dp_1(c: &mut Criterion) {
-    let time_limits = (100..=600).step_by(100);
-    let mut group = c.benchmark_group("DP_vt_SRW");
-    group.sampling_mode(SamplingMode::Flat);
+pub fn benchmark_walker_standard(c: &mut Criterion) {
+    let walk_qtys = vec![1, 10, 100, 1000, 10000, 100000, 1000000];
+    let mut group = c.benchmark_group("walker_standard_vq");
 
     let kernel = Kernel::from_generator(SimpleRwGenerator).unwrap();
+    let mut dp = DynamicProgramBuilder::new()
+        .simple()
+        .time_limit(400)
+        .kernel(kernel.clone())
+        .build()
+        .unwrap();
 
-    for time_limit in time_limits {
-        group.sample_size(10).bench_with_input(
-            BenchmarkId::from_parameter(time_limit),
-            &time_limit,
-            |b, &time_limit| {
-                let mut dp = DynamicProgramBuilder::new()
-                    .simple()
-                    .time_limit(time_limit)
-                    .kernel(kernel.clone())
-                    .build()
-                    .unwrap();
+    dp.compute();
 
-                b.iter(|| dp.compute());
-            },
-        );
+    let walker = StandardWalker { kernel: kernel };
+
+    for qty in walk_qtys.iter() {
+        group
+            .sample_size(10)
+            .bench_with_input(BenchmarkId::from_parameter(qty), qty, |b, qty| {
+                b.iter(|| walker.generate_paths(&dp, *qty, 100, 0, 400));
+            });
     }
 }
 
-// DPs with varying time limits, NormalDist kernel size 11
-pub fn benchmark_dp_2(c: &mut Criterion) {
-    let time_limits = (100..=600).step_by(100);
-    let mut group = c.benchmark_group("DP_vt_NormalDist_11");
-    group.sampling_mode(SamplingMode::Flat);
+pub fn benchmark_walker_multistep(c: &mut Criterion) {
+    let walk_qtys = vec![1, 10, 100, 1000, 10000, 100000, 1000000];
+    let mut group = c.benchmark_group("walker_multistep_vq");
 
-    let kernel = Kernel::from_generator(NormalDistGenerator {
-        diffusion: 5.0,
-        size: 11,
-    })
-    .unwrap();
+    let kernel = Kernel::from_generator(NormalDistGenerator::new(10.0, 21)).unwrap();
+    let mut dp = DynamicProgramBuilder::new()
+        .simple()
+        .time_limit(400)
+        .kernel(kernel.clone())
+        .build()
+        .unwrap();
 
-    for time_limit in time_limits {
-        group.sample_size(10).bench_with_input(
-            BenchmarkId::from_parameter(time_limit),
-            &time_limit,
-            |b, &time_limit| {
-                let mut dp = DynamicProgramBuilder::new()
-                    .simple()
-                    .time_limit(time_limit)
-                    .kernel(kernel.clone())
-                    .build()
-                    .unwrap();
+    dp.compute();
 
-                b.iter(|| dp.compute());
-            },
-        );
-    }
-}
+    let walker = MultiStepWalker {
+        max_step_size: 10,
+        kernel: kernel,
+    };
 
-// DP with varying time limits, NormalDist kernel varying sizes
-pub fn benchmark_dp_3(c: &mut Criterion) {
-    let time_limits = (200..=400).step_by(100);
-    let kernel_sizes = (3..=21);
-
-    for time_limit in time_limits {
-        let mut group = c.benchmark_group(format!("DP_{}_NormalDist_vs", time_limit));
-        group.sampling_mode(SamplingMode::Flat);
-
-        for kernel_size in kernel_sizes.clone() {
-            let kernel = Kernel::from_generator(NormalDistGenerator {
-                diffusion: 5.0,
-                size: kernel_size,
-            })
-            .unwrap();
-
-            group.sample_size(10).bench_with_input(
-                BenchmarkId::from_parameter(kernel_size),
-                &kernel_size,
-                |b, &kernel_size| {
-                    let mut dp = DynamicProgramBuilder::new()
-                        .simple()
-                        .time_limit(400)
-                        .kernel(kernel.clone())
-                        .build()
-                        .unwrap();
-
-                    b.iter(|| dp.compute());
-                },
-            );
-        }
+    for qty in walk_qtys.iter() {
+        group
+            .sample_size(10)
+            .bench_with_input(BenchmarkId::from_parameter(qty), qty, |b, qty| {
+                b.iter(|| walker.generate_paths(&dp, *qty, 100, 0, 400));
+            });
     }
 }
 
 criterion_group!(
-    benchmarks_dp,
-    benchmark_dp_1,
-    benchmark_dp_2,
-    benchmark_dp_3,
+    benchmarks_walkers,
+    benchmark_walker_standard,
+    benchmark_walker_multistep,
 );
-criterion_main!(benchmarks_dp);

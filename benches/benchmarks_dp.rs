@@ -77,7 +77,7 @@ pub fn benchmark_dp_3(c: &mut Criterion) {
             })
             .unwrap();
 
-            group.sample_size(10).bench_with_input(
+            group.sample_size(3).bench_with_input(
                 BenchmarkId::from_parameter(kernel_size),
                 &kernel_size,
                 |b, &kernel_size| {
