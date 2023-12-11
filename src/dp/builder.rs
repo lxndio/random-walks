@@ -67,6 +67,7 @@
 use crate::dataset::point::XYPoint;
 use crate::dp::simple::DynamicProgram;
 use crate::dp::{DynamicProgramPool, DynamicProgramType};
+use crate::kernel;
 use crate::kernel::Kernel;
 use num::Zero;
 use std::collections::HashMap;
@@ -126,7 +127,6 @@ pub struct DynamicProgramBuilder {
     time_limit: Option<usize>,
     dp_type: Option<DynamicProgramType>,
     kernels: Option<Vec<(usize, Kernel)>>,
-    field_probabilities: Option<Vec<Vec<f64>>>,
     field_types: Option<Vec<Vec<usize>>>,
     barriers: Vec<XYPoint>,
 }
@@ -220,27 +220,37 @@ impl DynamicProgramBuilder {
             return Err(DynamicProgramBuilderError::NoTypeSet);
         };
 
-        let mut field_probabilities = match self.field_probabilities {
-            Some(fp) => {
-                if fp.len() != 2 * time_limit + 1 {
-                    return Err(DynamicProgramBuilderError::WrongSizeOfFieldProbabilities);
-                }
-
-                for fpp in fp.iter() {
-                    if fpp.len() != 2 * time_limit + 1 {
-                        return Err(DynamicProgramBuilderError::WrongSizeOfFieldProbabilities);
-                    }
-                }
-
-                fp
-            }
-            None => vec![vec![1.0; 2 * time_limit + 1]; 2 * time_limit + 1],
-        };
-
         let mut field_types = match self.field_types {
             Some(ft) => ft,
             None => vec![vec![0; 2 * time_limit + 1]; 2 * time_limit + 1],
         };
+
+        let Some(mut kernels) = self.kernels else {
+            return Err(DynamicProgramBuilderError::NoKernelsSet);
+        };
+
+        // Map field types to contiguous value range
+
+        let mut kernels_mapped = Vec::new();
+        let mut field_type_map = HashMap::new();
+        let mut i = 0usize;
+
+        for (field_type, kernel) in kernels.iter() {
+            kernels_mapped.push(kernel.clone());
+            field_type_map.insert(field_type, i);
+            i += 1;
+        }
+
+        for x in 0..2 * time_limit + 1 {
+            for y in 0..2 * time_limit + 1 {
+                field_types[x][y] = field_type_map[&field_types[x][y]];
+            }
+        }
+
+        // Add barriers
+
+        let empty_kernel = kernel!(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+        kernels_mapped.push(empty_kernel);
 
         for (x, y) in self.barriers.iter().map(|p| <(i64, i64)>::from(*p)) {
             if x < -(time_limit as i64)
@@ -254,44 +264,18 @@ impl DynamicProgramBuilder {
             let x = (time_limit as i64 + x) as usize;
             let y = (time_limit as i64 + y) as usize;
 
-            field_probabilities[x][y] = 0.0;
+            field_types[x][y] = i;
         }
 
-        match dp_type {
-            DynamicProgramType::Simple => {
-                let Some(mut kernels) = self.kernels else {
-                    return Err(DynamicProgramBuilderError::NoKernelsSet);
-                };
-
-                // Map field types to contiguous value range
-
-                let mut kernels_mapped = Vec::new();
-                let mut field_type_map = HashMap::new();
-                let mut i = 0usize;
-
-                for (field_type, kernel) in kernels.iter() {
-                    kernels_mapped.push(kernel.clone());
-                    field_type_map.insert(field_type, i);
-                    i += 1;
-                }
-
-                for x in 0..2 * time_limit + 1 {
-                    for y in 0..2 * time_limit + 1 {
-                        field_types[x][y] = field_type_map[&field_types[x][y]];
-                    }
-                }
-
-                Ok(DynamicProgramPool::Single(DynamicProgram {
-                    table: vec![
-                        vec![vec![Zero::zero(); 2 * time_limit + 1]; 2 * time_limit + 1];
-                        time_limit + 1
-                    ],
-                    time_limit,
-                    kernels: kernels_mapped,
-                    field_types,
-                }))
-            }
-        }
+        Ok(DynamicProgramPool::Single(DynamicProgram {
+            table: vec![
+                vec![vec![Zero::zero(); 2 * time_limit + 1]; 2 * time_limit + 1];
+                time_limit + 1
+            ],
+            time_limit,
+            kernels: kernels_mapped,
+            field_types,
+        }))
     }
 }
 

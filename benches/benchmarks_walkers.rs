@@ -1,9 +1,9 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, SamplingMode};
 use randomwalks_lib::dp::builder::DynamicProgramBuilder;
 use randomwalks_lib::dp::DynamicPrograms;
+use randomwalks_lib::kernel::normal_dist::NormalDistGenerator;
 use randomwalks_lib::kernel::simple_rw::SimpleRwGenerator;
 use randomwalks_lib::kernel::Kernel;
-use randomwalks_lib::kernel::normal_dist::NormalDistGenerator;
 
 // DPs with varying time limit, SRW kernel
 pub fn benchmark_dp_1(c: &mut Criterion) {
@@ -40,7 +40,8 @@ pub fn benchmark_dp_2(c: &mut Criterion) {
     let kernel = Kernel::from_generator(NormalDistGenerator {
         diffusion: 5.0,
         size: 11,
-    }).unwrap();
+    })
+    .unwrap();
 
     for time_limit in time_limits {
         group.sample_size(10).bench_with_input(
@@ -73,7 +74,8 @@ pub fn benchmark_dp_3(c: &mut Criterion) {
             let kernel = Kernel::from_generator(NormalDistGenerator {
                 diffusion: 5.0,
                 size: kernel_size,
-            }).unwrap();
+            })
+            .unwrap();
 
             group.sample_size(10).bench_with_input(
                 BenchmarkId::from_parameter(kernel_size),
