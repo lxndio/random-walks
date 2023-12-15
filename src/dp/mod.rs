@@ -104,14 +104,14 @@ pub enum DynamicProgramPool {
 
 #[cfg(not(tarpaulin_include))]
 impl DynamicProgramPool {
-    fn try_unwrap(&self) -> Result<&DynamicProgram, DynamicProgramError> {
+    pub fn try_unwrap(&self) -> Result<&DynamicProgram, DynamicProgramError> {
         match self {
             DynamicProgramPool::Single(single) => Ok(single),
             DynamicProgramPool::Multiple(_) => Err(DynamicProgramError::UnwrapOnMultiple),
         }
     }
 
-    fn try_unwrap_mut(&mut self) -> Result<&mut DynamicProgram, DynamicProgramError> {
+    pub fn try_unwrap_mut(&mut self) -> Result<&mut DynamicProgram, DynamicProgramError> {
         match self {
             DynamicProgramPool::Single(single) => Ok(single),
             DynamicProgramPool::Multiple(_) => Err(DynamicProgramError::UnwrapOnMultiple),
