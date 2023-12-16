@@ -78,6 +78,13 @@ impl DynamicProgram {
                 let kernel_x = x - i;
                 let kernel_y = y - j;
 
+                if self.at(i, j, t - 1) * kernel.at(kernel_x, kernel_y) == 0.0
+                    && self.at(i, j, t - 1) > 0.0 && kernel.at(kernel_x, kernel_y) > 0.0 {
+                    println!("{}", self.at(i, j, t - 1));
+                    println!("{}", kernel.at(kernel_x, kernel_y));
+                    panic!("Rounding error found at x: {x}, y: {y}, t: {t}!");
+                }
+
                 sum += self.at(i, j, t - 1) * kernel.at(kernel_x, kernel_y);
             }
         }
