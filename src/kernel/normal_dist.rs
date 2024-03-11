@@ -1,3 +1,4 @@
+use crate::dataset::point::XYPoint;
 use crate::kernel::generator::{KernelGenerator, KernelGeneratorError};
 use crate::kernel::Kernel;
 use statrs::distribution::{Continuous, MultivariateNormal};
@@ -5,11 +6,16 @@ use statrs::distribution::{Continuous, MultivariateNormal};
 pub struct NormalDistGenerator {
     pub diffusion: f64,
     pub size: usize,
+    pub mean: XYPoint,
 }
 
 impl NormalDistGenerator {
-    pub fn new(diffusion: f64, size: usize) -> Self {
-        Self { diffusion, size }
+    pub fn new(diffusion: f64, size: usize, mean: XYPoint) -> Self {
+        Self {
+            diffusion,
+            size,
+            mean,
+        }
     }
 }
 
@@ -28,7 +34,10 @@ impl KernelGenerator for NormalDistGenerator {
             .get_mut(0)
             .ok_or(KernelGeneratorError::OneKernelRequired)?;
 
-        let mean = vec![(self.size / 2) as f64, (self.size / 2) as f64];
+        let mean = vec![
+            (self.size / 2 + self.mean.x as usize) as f64,
+            (self.size / 2 + self.mean.y as usize) as f64,
+        ];
         let cov = vec![self.diffusion, 0.0, 0.0, self.diffusion];
         let distribution = MultivariateNormal::new(mean, cov).unwrap();
 
