@@ -87,7 +87,7 @@ pub trait DynamicPrograms {
 
     fn print(&self, t: usize);
 
-    fn save(&self, filename: String) -> anyhow::Result<()>;
+    fn save(&self, filename: String) -> std::io::Result<()>;
 }
 
 #[derive(Error, Debug)]
@@ -161,7 +161,7 @@ impl DynamicPrograms for DynamicProgramPool {
 
     /// Wrapper for `SimpleDynamicProgram::save()`. Fails if called on a `DynamicProgramPool`
     /// holding multiple dynamic programs.
-    fn save(&self, filename: String) -> anyhow::Result<()> {
+    fn save(&self, filename: String) -> std::io::Result<()> {
         self.try_unwrap().unwrap().save(filename)
     }
 }

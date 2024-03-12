@@ -336,15 +336,13 @@ impl DynamicPrograms for DynamicProgram {
     }
 
     #[cfg(feature = "saving")]
-    fn save(&self, filename: String) -> Result<(), DynamicProgramSavingError> {
+    fn save(&self, filename: String) -> std::io::Result<()> {
         let (limit_neg, limit_pos) = self.limits();
         let file = File::create(filename)?;
         let writer = BufWriter::new(file);
-        let mut encoder = Encoder::new(writer, 9).context("could not create encoder")?;
+        let mut encoder = Encoder::new(writer, 9)?;
 
-        encoder
-            .multithread(4)
-            .context("could not enable multithreading")?;
+        encoder.multithread(4)?;
 
         let mut encoder = encoder.auto_finish();
 
