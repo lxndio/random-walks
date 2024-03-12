@@ -407,12 +407,12 @@ pub fn compute_multiple(dps: &mut [DynamicProgram]) {
     dps.par_iter_mut().for_each(|dp| dp.compute());
 }
 
-pub fn compute_multiple_save(dps: Vec<DynamicProgram>) {
+pub fn compute_multiple_save(dps: Vec<DynamicProgram>, filename: String) {
     let dps = dps.into_iter().zip((0..).into_iter()).collect::<Vec<_>>();
 
     dps.into_par_iter().for_each(|(mut dp, i)| {
         dp.compute();
-        dp.save(format!("dp_{}.zst", i)).unwrap();
+        dp.save(format!("{filename}_{i}.zst")).unwrap();
     });
 }
 
