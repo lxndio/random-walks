@@ -1,14 +1,15 @@
+use anyhow::Context;
+use thiserror::Error;
+use time::format_description::parse_borrowed;
+use time::macros::format_description;
+use time::PrimitiveDateTime;
+
 use crate::dataset::loader::CoordinateType;
 use crate::dataset::point::Coordinates;
 use crate::dataset::Dataset;
 use crate::dp::DynamicProgramPool;
 use crate::walk::Walk;
 use crate::walker::Walker;
-use anyhow::Context;
-use thiserror::Error;
-use time::format_description::parse_borrowed;
-use time::macros::format_description;
-use time::PrimitiveDateTime;
 
 #[derive(Error, Debug)]
 pub enum DatasetWalksBuilderError {

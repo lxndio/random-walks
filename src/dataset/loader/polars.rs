@@ -1,9 +1,11 @@
+use std::collections::HashMap;
+
+use anyhow::bail;
+use polars::frame::DataFrame;
+
 use crate::dataset::loader::{ColumnAction, CoordinateType, DatasetLoader, DatasetLoaderError};
 use crate::dataset::point::{GCSPoint, Point, XYPoint};
 use crate::dataset::Datapoint;
-use anyhow::bail;
-use polars::frame::DataFrame;
-use std::collections::HashMap;
 
 #[derive(Debug)]
 pub struct PolarsLoaderOptions {
@@ -100,13 +102,15 @@ impl DatasetLoader for PolarsLoader {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
+    use polars::df;
+    use polars::prelude::NamedFrom;
+
     use crate::dataset::loader::polars::{PolarsLoader, PolarsLoaderOptions};
     use crate::dataset::loader::{ColumnAction, CoordinateType};
     use crate::dataset::point::{Point, XYPoint};
     use crate::dataset::{Datapoint, Dataset};
-    use polars::df;
-    use polars::prelude::NamedFrom;
-    use std::collections::HashMap;
 
     #[test]
     fn test_polars_loader() {

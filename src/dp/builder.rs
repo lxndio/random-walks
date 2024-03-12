@@ -64,14 +64,16 @@
 //! field is not visited in any way, while a probability of `1.0` means that the field has its
 //! normal probability that was assigned to it while computing the dynamic program.
 
+use std::collections::HashMap;
+
+use num::Zero;
+use thiserror::Error;
+
 use crate::dataset::point::XYPoint;
 use crate::dp::simple::DynamicProgram;
 use crate::dp::{DynamicProgramPool, DynamicProgramType};
 use crate::kernel;
 use crate::kernel::Kernel;
-use num::Zero;
-use std::collections::HashMap;
-use thiserror::Error;
 
 /// An error that can occur when using a [`DynamicProgramBuilder`].
 #[derive(Error, Debug)]

@@ -1,5 +1,6 @@
-use crate::kernel::Kernel;
 use thiserror::Error;
+
+use crate::kernel::Kernel;
 
 pub trait KernelGenerator {
     fn prepare(&self, kernels: &mut Vec<Kernel>) -> Result<(), KernelGeneratorError>;

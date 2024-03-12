@@ -1,7 +1,8 @@
+use statrs::distribution::{Continuous, MultivariateNormal};
+
 use crate::dataset::point::XYPoint;
 use crate::kernel::generator::{KernelGenerator, KernelGeneratorError};
 use crate::kernel::Kernel;
-use statrs::distribution::{Continuous, MultivariateNormal};
 
 pub struct NormalDistGenerator {
     pub diffusion: f64,

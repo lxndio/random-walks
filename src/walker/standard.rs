@@ -1,9 +1,10 @@
-use crate::dp::DynamicProgramPool;
-use crate::kernel::Kernel;
-use crate::walker::{Walk, Walker, WalkerError};
 use num::Zero;
 use rand::distributions::{WeightedError, WeightedIndex};
 use rand::prelude::*;
+
+use crate::dp::DynamicProgramPool;
+use crate::kernel::Kernel;
+use crate::walker::{Walk, Walker, WalkerError};
 
 pub struct StandardWalker {
     pub kernel: Kernel,

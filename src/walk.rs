@@ -8,7 +8,9 @@
 //! reviewing walks. If the `plotting` feature is enabled, walks can also be plotted to an
 //! image file.
 
-use crate::dataset::point::XYPoint;
+use std::collections::HashSet;
+use std::ops::{Index, Range};
+
 use anyhow::bail;
 use geo::{line_string, Coord, FrechetDistance, LineString};
 use plotters::backend::BitMapBackend;
@@ -17,8 +19,8 @@ use plotters::drawing::IntoDrawingArea;
 use plotters::element::{Circle, EmptyElement, Text};
 use plotters::prelude::{IntoFont, LineSeries, PointSeries, RGBColor, BLACK, WHITE};
 use rand::Rng;
-use std::collections::HashSet;
-use std::ops::{Index, Range};
+
+use crate::dataset::point::XYPoint;
 
 /// A random walk consisting of multiple points.
 #[derive(Default, Debug, Clone, PartialEq)]

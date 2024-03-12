@@ -1,7 +1,8 @@
+use strum::IntoEnumIterator;
+
 use crate::kernel::biased_rw::BiasedRwGenerator;
 use crate::kernel::generator::{KernelGenerator, KernelGeneratorError};
 use crate::kernel::{Direction, Kernel};
-use strum::IntoEnumIterator;
 
 pub struct CorrelatedRwGenerator {
     pub persistence: f64,

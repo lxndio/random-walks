@@ -68,18 +68,20 @@
 //! ```
 //!
 
+use std::collections::HashMap;
+
+use anyhow::bail;
+#[cfg(feature = "polars_loading")]
+use polars::prelude::DataFrame;
+use rand::Rng;
+use thiserror::Error;
+
 use crate::dataset::loader::csv::{CSVLoader, CSVLoaderOptions};
 use crate::dataset::loader::polars::{PolarsLoader, PolarsLoaderOptions};
 use crate::dataset::loader::{ColumnAction, CoordinateType};
 use crate::dataset::point::{Point, XYPoint};
 use crate::dataset::{Datapoint, Dataset};
 use crate::xy;
-use anyhow::bail;
-#[cfg(feature = "polars_loading")]
-use polars::prelude::DataFrame;
-use rand::Rng;
-use std::collections::HashMap;
-use thiserror::Error;
 
 /// An error that can occur when using a [`DatasetBuilder`](DatasetBuilder).
 #[derive(Error, Debug)]

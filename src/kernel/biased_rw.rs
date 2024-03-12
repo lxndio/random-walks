@@ -1,6 +1,7 @@
+use strum::IntoEnumIterator;
+
 use crate::kernel::generator::{KernelGenerator, KernelGeneratorError};
 use crate::kernel::{Direction, Kernel};
-use strum::IntoEnumIterator;
 
 pub struct BiasedRwGenerator {
     pub probability: f64,

@@ -1,10 +1,12 @@
-use crate::dp::DynamicProgramPool;
-use crate::kernel::Kernel;
-use crate::walker::{Walk, Walker, WalkerError};
+use std::collections::HashMap;
+
 use num::Zero;
 use rand::distributions::{WeightedError, WeightedIndex};
 use rand::prelude::*;
-use std::collections::HashMap;
+
+use crate::dp::DynamicProgramPool;
+use crate::kernel::Kernel;
+use crate::walker::{Walk, Walker, WalkerError};
 
 #[derive(Clone)]
 pub struct LandCoverWalker {

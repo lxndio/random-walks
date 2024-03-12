@@ -141,11 +141,8 @@ pub mod loader;
 pub mod point;
 pub mod walks_builder;
 
-use crate::dataset::loader::{CoordinateType, DatasetLoader};
-use crate::dp::{DynamicProgramPool, DynamicPrograms};
-use crate::walk::Walk;
-use crate::walker::Walker;
-use crate::xy;
+use std::collections::HashMap;
+
 use anyhow::{anyhow, bail, Context};
 use line_drawing::Bresenham;
 use pathfinding::prelude::{build_path, dijkstra_all};
@@ -154,10 +151,15 @@ use plotters::prelude::*;
 use point::{Coordinates, GCSPoint, Point, XYPoint};
 use proj::Proj;
 use rand::Rng;
-use std::collections::HashMap;
 use thiserror::Error;
 use time::macros::format_description;
 use time::PrimitiveDateTime;
+
+use crate::dataset::loader::{CoordinateType, DatasetLoader};
+use crate::dp::{DynamicProgramPool, DynamicPrograms};
+use crate::walk::Walk;
+use crate::walker::Walker;
+use crate::xy;
 
 /// A filter that can be applied to a [`Dataset`] by calling [`Dataset::filter`].
 #[derive(Debug)]
@@ -787,10 +789,11 @@ impl Dataset {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use crate::dataset::loader::CoordinateType;
     use crate::dataset::point::{Point, XYPoint};
     use crate::dataset::{Datapoint, Dataset, DatasetFilter};
-    use std::collections::HashMap;
 
     #[test]
     fn test_dataset_keep() {

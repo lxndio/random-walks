@@ -1,11 +1,13 @@
 //! Provides functionality for creating kernels, as well as pre-defined kernel generators.
 
-use crate::kernel::generator::{KernelGenerator, KernelGeneratorError};
-use anyhow::bail;
-use serde::{Deserialize, Serialize};
 use std::fmt::{Debug, Formatter};
 use std::ops::{Div, DivAssign, Index, IndexMut, Mul, MulAssign};
+
+use anyhow::bail;
+use serde::{Deserialize, Serialize};
 use strum::EnumIter;
+
+use crate::kernel::generator::{KernelGenerator, KernelGeneratorError};
 
 pub mod biased_correlated_rw;
 pub mod biased_rw;

@@ -1,16 +1,13 @@
-use crate::dp::builder::DynamicProgramBuilder;
-use crate::dp::{DynamicProgramPool, DynamicPrograms};
-use crate::kernel;
-use crate::kernel::Kernel;
-use anyhow::{bail, Context};
-use num::Zero;
-#[cfg(feature = "plotting")]
-use plotters::prelude::*;
 use std::fmt::Debug;
 use std::ops::{DerefMut, Range};
 use std::sync::mpsc::channel;
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
+
+use anyhow::{bail, Context};
+use num::Zero;
+#[cfg(feature = "plotting")]
+use plotters::prelude::*;
 use workerpool::thunk::{Thunk, ThunkWorker};
 use workerpool::Pool;
 #[cfg(feature = "saving")]
@@ -20,6 +17,11 @@ use {
     std::io::{BufWriter, Write},
     zstd::{Decoder, Encoder},
 };
+
+use crate::dp::builder::DynamicProgramBuilder;
+use crate::dp::{DynamicProgramPool, DynamicPrograms};
+use crate::kernel;
+use crate::kernel::Kernel;
 
 pub struct DynamicProgram {
     pub(crate) table: Vec<Vec<Vec<f64>>>,
@@ -334,7 +336,7 @@ impl DynamicPrograms for DynamicProgram {
     }
 
     #[cfg(feature = "saving")]
-    fn save(&self, filename: String) -> anyhow::Result<()> {
+    fn save(&self, filename: String) -> Result<(), DynamicProgramSavingError> {
         let (limit_neg, limit_pos) = self.limits();
         let file = File::create(filename)?;
         let writer = BufWriter::new(file);

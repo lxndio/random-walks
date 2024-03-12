@@ -6,9 +6,10 @@ pub mod levy;
 pub mod multi_step;
 pub mod standard;
 
+use thiserror::Error;
+
 use crate::dp::DynamicProgramPool;
 use crate::walk::Walk;
-use thiserror::Error;
 
 pub trait Walker {
     fn generate_path(

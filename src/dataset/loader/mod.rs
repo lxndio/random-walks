@@ -2,9 +2,10 @@ pub mod csv;
 #[cfg(feature = "polars")]
 pub mod polars;
 
-use crate::dataset::Datapoint;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+
+use crate::dataset::Datapoint;
 
 pub trait DatasetLoader {
     fn load(&self) -> anyhow::Result<Vec<Datapoint>>;

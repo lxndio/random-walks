@@ -65,9 +65,10 @@
 //! can be run.
 //!
 
-use crate::dp::simple::DynamicProgram;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+
+use crate::dp::simple::DynamicProgram;
 
 pub mod builder;
 pub mod simple;
