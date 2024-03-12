@@ -3,6 +3,7 @@ use rand::distributions::{WeightedError, WeightedIndex};
 use rand::prelude::Distribution;
 use rand::Rng;
 
+use crate::dp::simple::DynamicProgram;
 use crate::dp::DynamicProgramPool;
 use crate::kernel::Kernel;
 use crate::walker::{Walk, Walker, WalkerError};
@@ -19,8 +20,14 @@ impl Walker for CorrelatedWalker {
         to_y: isize,
         time_steps: usize,
     ) -> Result<Walk, WalkerError> {
-        let DynamicProgramPool::Multiple(dp) = dp else {
+        if matches!(dp, DynamicProgramPool::Single(_)) {
             return Err(WalkerError::RequiresMultipleDynamicPrograms);
+        }
+
+        let dp_qty = match dp {
+            DynamicProgramPool::Multiple(dp) => dp.len(),
+            DynamicProgramPool::MultipleFromDisk(dp) => dp.len(),
+            _ => return Err(WalkerError::RequiresMultipleDynamicPrograms),
         };
 
         let mut path = Vec::new();
@@ -28,8 +35,8 @@ impl Walker for CorrelatedWalker {
         let mut rng = rand::thread_rng();
 
         // Check if any path exists leading to the given end point for each variant
-        for variant in 0..dp.len() {
-            if dp[variant].at(to_x, to_y, time_steps).is_zero() {
+        for variant in 0..dp_qty {
+            if dp_variant(dp, variant).at(to_x, to_y, time_steps).is_zero() {
                 return Err(WalkerError::NoPathExists);
             }
         }
@@ -67,8 +74,8 @@ impl Walker for CorrelatedWalker {
             for (mov_x, mov_y) in neighbors.iter() {
                 let (i, j) = (x + mov_x, y + mov_y);
 
-                let p_b = dp[variant].at_or(i, j, t - 1, 0.0);
-                let p_a = dp[variant].at_or(x, y, t, 0.0);
+                let p_b = dp_variant(dp, variant).at_or(i, j, t - 1, 0.0);
+                let p_a = dp_variant(dp, variant).at_or(x, y, t, 0.0);
                 let p_a_b = self.kernels[variant].at(i - x, j - y);
 
                 prev_probs.push((p_a_b * p_b) / p_a);
@@ -103,5 +110,13 @@ impl Walker for CorrelatedWalker {
         } else {
             String::from("Correlated Walker")
         }
+    }
+}
+
+fn dp_variant(dp: &DynamicProgramPool, index: usize) -> DynamicProgram {
+    match dp {
+        DynamicProgramPool::Multiple(dp) => dp.get(index).unwrap().clone(),
+        DynamicProgramPool::MultipleFromDisk(dp) => dp.get(index).unwrap(),
+        _ => panic!("This should not happen."),
     }
 }

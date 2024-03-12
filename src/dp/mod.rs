@@ -65,6 +65,8 @@
 //! can be run.
 //!
 
+use std::{borrow::Borrow, fs, ops::Index};
+
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -98,9 +100,42 @@ pub enum DynamicProgramError {
     UnwrapOnMultiple,
 }
 
+pub struct DynamicProgramDiskVec {
+    path: String,
+    len: usize,
+}
+
+impl DynamicProgramDiskVec {
+    pub fn try_new(path: String) -> std::io::Result<Self> {
+        let len = fs::read_dir(&path)?.count();
+
+        Ok(Self { path, len })
+    }
+
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    pub fn get(&self, index: usize) -> Option<DynamicProgram> {
+        if index >= self.len {
+            return None;
+        }
+
+        let path = format!("{}/dp_{}.zst", self.path, index);
+
+        Some(
+            DynamicProgram::load(path)
+                .expect("could not load dynamic program")
+                .try_into()
+                .unwrap(),
+        )
+    }
+}
+
 pub enum DynamicProgramPool {
     Single(DynamicProgram),
     Multiple(Vec<DynamicProgram>),
+    MultipleFromDisk(DynamicProgramDiskVec),
 }
 
 #[cfg(not(tarpaulin_include))]
@@ -108,21 +143,21 @@ impl DynamicProgramPool {
     pub fn try_unwrap(&self) -> Result<&DynamicProgram, DynamicProgramError> {
         match self {
             DynamicProgramPool::Single(single) => Ok(single),
-            DynamicProgramPool::Multiple(_) => Err(DynamicProgramError::UnwrapOnMultiple),
+            _ => Err(DynamicProgramError::UnwrapOnMultiple),
         }
     }
 
     pub fn try_unwrap_mut(&mut self) -> Result<&mut DynamicProgram, DynamicProgramError> {
         match self {
             DynamicProgramPool::Single(single) => Ok(single),
-            DynamicProgramPool::Multiple(_) => Err(DynamicProgramError::UnwrapOnMultiple),
+            _ => Err(DynamicProgramError::UnwrapOnMultiple),
         }
     }
 
     pub fn try_into(self) -> Result<DynamicProgram, DynamicProgramError> {
         match self {
             DynamicProgramPool::Single(single) => Ok(single),
-            DynamicProgramPool::Multiple(_) => Err(DynamicProgramError::UnwrapOnMultiple),
+            _ => Err(DynamicProgramError::UnwrapOnMultiple),
         }
     }
 }

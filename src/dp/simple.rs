@@ -24,6 +24,7 @@ use crate::dp::{DynamicProgramPool, DynamicPrograms};
 use crate::kernel;
 use crate::kernel::Kernel;
 
+#[derive(Clone)]
 pub struct DynamicProgram {
     pub(crate) table: Vec<Vec<Vec<f64>>>,
     pub(crate) time_limit: usize,
