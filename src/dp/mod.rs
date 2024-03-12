@@ -118,6 +118,13 @@ impl DynamicProgramPool {
             DynamicProgramPool::Multiple(_) => Err(DynamicProgramError::UnwrapOnMultiple),
         }
     }
+
+    pub fn try_into(self) -> Result<DynamicProgram, DynamicProgramError> {
+        match self {
+            DynamicProgramPool::Single(single) => Ok(single),
+            DynamicProgramPool::Multiple(_) => Err(DynamicProgramError::UnwrapOnMultiple),
+        }
+    }
 }
 
 #[cfg(not(tarpaulin_include))]
