@@ -154,3 +154,10 @@ pub mod dp;
 pub mod kernel;
 pub mod walk;
 pub mod walker;
+
+pub fn set_threads(threads: usize) {
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(threads)
+        .build_global()
+        .unwrap();
+}

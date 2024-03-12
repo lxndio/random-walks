@@ -8,6 +8,7 @@ use anyhow::{bail, Context};
 use num::Zero;
 #[cfg(feature = "plotting")]
 use plotters::prelude::*;
+use rayon::prelude::*;
 use workerpool::thunk::{Thunk, ThunkWorker};
 use workerpool::Pool;
 #[cfg(feature = "saving")]
@@ -402,42 +403,9 @@ fn apply_kernel(
     sum
 }
 
-// fn apply_kernel(
-//     table_old: &Vec<Vec<f64>>,
-//     table_new: &mut Vec<Vec<f64>>,
-//     kernel: &Kernel,
-//     field_probabilities: &Vec<Vec<f64>>,
-//     limits: (isize, isize),
-//     x: isize,
-//     y: isize,
-//     t: usize,
-// ) {
-//     let ks = (kernel.size() / 2) as isize;
-//     let (limit_neg, limit_pos) = limits;
-//     let mut sum = 0.0;
-//
-//     for i in x - ks..=x + ks {
-//         if i < limit_neg || i > limit_pos {
-//             continue;
-//         }
-//
-//         for j in y - ks..=y + ks {
-//             if j < limit_neg || j > limit_pos {
-//                 continue;
-//             }
-//
-//             // Kernel coordinates are inverted offset, i.e. -(i - x) and -(j - y)
-//             let kernel_x = x - i;
-//             let kernel_y = y - j;
-//
-//             sum += table_old[(limit_pos + i) as usize][(limit_pos + j) as usize]
-//                 * kernel.at(kernel_x, kernel_y);
-//         }
-//     }
-//
-//     table_new[(limit_pos + x) as usize][(limit_pos + y) as usize] =
-//         sum * field_probabilities[(limit_pos + x) as usize][(limit_pos + y) as usize];
-// }
+pub fn compute_multiple(dps: &mut [DynamicProgram]) {
+    dps.par_iter_mut().for_each(|dp| dp.compute());
+}
 
 #[cfg(not(tarpaulin_include))]
 impl Debug for DynamicProgram {
