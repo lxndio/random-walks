@@ -407,6 +407,15 @@ pub fn compute_multiple(dps: &mut [DynamicProgram]) {
     dps.par_iter_mut().for_each(|dp| dp.compute());
 }
 
+pub fn compute_multiple_save(dps: Vec<DynamicProgram>) {
+    let dps = dps.into_iter().zip((0..).into_iter()).collect::<Vec<_>>();
+
+    dps.into_par_iter().for_each(|(mut dp, i)| {
+        dp.compute();
+        dp.save(format!("dp_{}.zst", i)).unwrap();
+    });
+}
+
 #[cfg(not(tarpaulin_include))]
 impl Debug for DynamicProgram {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
