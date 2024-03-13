@@ -27,6 +27,7 @@ workerpool = "1.2.0"
 statrs = "0.16.0"
 nalgebra = "0.32.3"
 rayon = "1.9.0"
+log = "0.4.21"
 
 [dev-dependencies]
 criterion = { version = "0.5.1", features = ["html_reports"] }

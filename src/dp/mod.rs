@@ -67,6 +67,7 @@
 
 use std::{borrow::Borrow, fs, ops::Index};
 
+use log::trace;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -108,6 +109,7 @@ pub struct DynamicProgramDiskVec {
 impl DynamicProgramDiskVec {
     pub fn try_new(path: String) -> std::io::Result<Self> {
         let len = fs::read_dir(&path)?.count();
+        trace!("Initializing dynamic program disk vector with {len} elements");
 
         Ok(Self { path, len })
     }
@@ -122,6 +124,7 @@ impl DynamicProgramDiskVec {
         }
 
         let path = format!("{}/dp_{}.zst", self.path, index);
+        trace!("Loading dynamic program from {path}");
 
         Some(
             DynamicProgram::load(path)
