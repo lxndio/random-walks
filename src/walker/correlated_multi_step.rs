@@ -1,3 +1,4 @@
+use log::{debug, error, trace};
 use num::Zero;
 use rand::distributions::{WeightedError, WeightedIndex};
 use rand::prelude::Distribution;
@@ -36,6 +37,11 @@ impl Walker for CorrelatedMultiStepWalker {
             return Err(WalkerError::RequiresMultipleDynamicPrograms);
         }
 
+        debug!(
+            "Generating path for ({}, {}) with {} time steps",
+            to_x, to_y, time_steps
+        );
+
         let dp_qty = match dp {
             DynamicProgramPool::Multiple(dp) => dp.len(),
             DynamicProgramPool::MultipleFromDisk(dp) => dp.len(),
@@ -65,11 +71,11 @@ impl Walker for CorrelatedMultiStepWalker {
             middle_section.end += remainder;
         }
 
-        // Check if any path exists leading to the given end point for each variant
-        for variant in 0..dp_qty {
-            if dp_variant(dp, variant).at(to_x, to_y, time_steps).is_zero() {
-                return Err(WalkerError::NoPathExists);
-            }
+        debug!("Sections: {:?}", sections);
+
+        // Check if any path exists leading to the given end point for any variant
+        if !(0..dp_qty).any(|i| !dp.at(to_x, to_y, time_steps, i).unwrap().is_zero()) {
+            return Err(WalkerError::NoPathExists);
         }
 
         path.push((x as i64, y as i64).into());
@@ -103,8 +109,11 @@ impl Walker for CorrelatedMultiStepWalker {
         }
 
         let mut last_direction = direction;
+        debug!("First direction: {}", last_direction);
 
         for t in (1..time_steps).rev() {
+            debug!("Time step: {}", t);
+
             path.push((x as i64, y as i64).into());
 
             let mut prev_probs = Vec::new();
@@ -112,29 +121,41 @@ impl Walker for CorrelatedMultiStepWalker {
 
             for i in x - max_step_size..=x + max_step_size {
                 for j in y - max_step_size..=y + max_step_size {
-                    let p_b = dp_variant(dp, last_direction).at_or(i, j, t - 1, 0.0);
-                    let p_a = dp_variant(dp, last_direction).at_or(x, y, t, 0.0);
+                    let p_b = dp.at_or(i, j, t - 1, last_direction, 0.0).unwrap();
+                    let p_a = dp.at_or(x, y, t, last_direction, 0.0).unwrap();
                     let p_a_b = self.kernels[last_direction].at(i - x, j - y);
+
+                    trace!(
+                        "p_b: {}, p_a: {}, p_a_b: {}, prob: {}",
+                        p_b,
+                        p_a,
+                        p_a_b,
+                        (p_a_b * p_b) / p_a
+                    );
 
                     prev_probs.push((p_a_b * p_b) / p_a);
                     movements.push((i - x, j - y));
                 }
             }
 
-            let direction = match WeightedIndex::new(prev_probs) {
+            let direction = match WeightedIndex::new(&prev_probs) {
                 Ok(dist) => dist.sample(&mut rng),
                 Err(WeightedError::AllWeightsZero) => {
-                    eprintln!("time step: {t}, x: {x}, y: {y}");
+                    error!("time step: {t}, x: {x}, y: {y}");
                     return Err(WalkerError::InconsistentPath);
                 }
-                _ => return Err(WalkerError::RandomDistributionError),
+                Err(e) => {
+                    error!("Random distribution error: {e}");
+                    error!("Weights:\n{:#?}", prev_probs);
+                    return Err(WalkerError::RandomDistributionError);
+                }
             };
             let (dx, dy) = movements[direction];
 
             x += dx;
             y += dy;
 
-            println!("{dx}, {dy}");
+            debug!("Movement: ({}, {})", dx, dy);
 
             let row = sections
                 .iter()
@@ -146,6 +167,7 @@ impl Walker for CorrelatedMultiStepWalker {
                 .unwrap()
                 * self.directions_per_axis;
             last_direction = row + column;
+            debug!("Last direction: {}", last_direction);
         }
 
         path.reverse();
@@ -160,13 +182,5 @@ impl Walker for CorrelatedMultiStepWalker {
         } else {
             String::from("Correlated Multi Step Walker")
         }
-    }
-}
-
-fn dp_variant(dp: &DynamicProgramPool, index: usize) -> DynamicProgram {
-    match dp {
-        DynamicProgramPool::Multiple(dp) => dp.get(index).unwrap().clone(),
-        DynamicProgramPool::MultipleFromDisk(dp) => dp.get(index).unwrap(),
-        _ => panic!("This should not happen."),
     }
 }

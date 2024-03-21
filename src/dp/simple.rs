@@ -1,10 +1,15 @@
+use std::borrow::BorrowMut;
 use std::fmt::Debug;
+use std::fs;
 use std::ops::{DerefMut, Range};
+use std::path::Path;
 use std::sync::mpsc::channel;
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
 
 use anyhow::{bail, Context};
+use log::trace;
+use num::traits::ToBytes;
 use num::Zero;
 #[cfg(feature = "plotting")]
 use plotters::prelude::*;
@@ -144,6 +149,17 @@ impl DynamicProgram {
         }
 
         Ok(DynamicProgramPool::Single(dp))
+    }
+
+    pub fn into_iter(self) -> DynamicProgramLayerIterator {
+        DynamicProgramLayerIterator {
+            last_layer: Vec::new(),
+            layer: 0,
+            dp: None,
+            time_limit: self.time_limit,
+            kernels: self.kernels,
+            field_types: self.field_types,
+        }
     }
 }
 
@@ -330,7 +346,7 @@ impl DynamicPrograms for DynamicProgram {
     fn print(&self, t: usize) {
         for y in 0..2 * self.time_limit + 1 {
             for x in 0..2 * self.time_limit + 1 {
-                print!("{} ", self.table[t][x][y]);
+                print!("{:.4} ", self.table[t][x][y]);
             }
 
             println!();
@@ -404,19 +420,6 @@ fn apply_kernel(
     sum
 }
 
-pub fn compute_multiple(dps: &mut [DynamicProgram]) {
-    dps.par_iter_mut().for_each(|dp| dp.compute());
-}
-
-pub fn compute_multiple_save(dps: Vec<DynamicProgram>, filename: String) {
-    let dps = dps.into_iter().zip((0..).into_iter()).collect::<Vec<_>>();
-
-    dps.into_par_iter().for_each(|(mut dp, i)| {
-        dp.compute();
-        dp.save(format!("{filename}_{i}.zst")).unwrap();
-    });
-}
-
 #[cfg(not(tarpaulin_include))]
 impl Debug for DynamicProgram {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -435,6 +438,130 @@ impl PartialEq for DynamicProgram {
 }
 
 impl Eq for DynamicProgram {}
+
+pub struct DynamicProgramLayerIterator {
+    pub(crate) last_layer: Vec<Vec<f64>>,
+    pub(crate) layer: usize,
+    pub(crate) dp: Option<DynamicProgram>,
+    pub(crate) time_limit: usize,
+    pub(crate) kernels: Vec<Kernel>,
+    pub(crate) field_types: Vec<Vec<usize>>,
+}
+
+impl Iterator for DynamicProgramLayerIterator {
+    type Item = Vec<Vec<f64>>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.layer >= self.time_limit {
+            return None;
+        }
+
+        if self.layer == 0 {
+            self.last_layer = vec![vec![0.0; 2 * self.time_limit + 1]; 2 * self.time_limit + 1];
+            self.last_layer[self.time_limit][self.time_limit] = 1.0;
+            self.layer += 1;
+
+            let mut table =
+                vec![vec![vec![0.0; 2 * self.time_limit + 1]; 2 * self.time_limit + 1]; 2];
+            table[0] = self.last_layer.clone();
+
+            self.dp = Some(DynamicProgram {
+                table,
+                time_limit: self.time_limit,
+                kernels: self.kernels.clone(),
+                field_types: self.field_types.clone(),
+            });
+
+            return Some(self.last_layer.clone());
+        }
+
+        let mut table = vec![vec![vec![0.0; 2 * self.time_limit + 1]; 2 * self.time_limit + 1]; 2];
+        table[0] = self.last_layer.clone();
+
+        let dp = self.dp.as_mut().unwrap();
+        dp.table = table;
+
+        let (limit_neg, limit_pos) = dp.limits();
+
+        for x in limit_neg..=limit_pos {
+            for y in limit_neg..=limit_pos {
+                dp.apply_kernel_at(x, y, 1);
+            }
+        }
+
+        self.last_layer = dp.table[1].clone();
+        self.layer += 1;
+
+        Some(dp.table[1].clone())
+    }
+}
+
+pub fn compute_multiple(dps: &mut [DynamicProgram]) {
+    dps.par_iter_mut().for_each(|dp| dp.compute());
+}
+
+pub fn compute_multiple_save(dps: Vec<DynamicProgram>, filename: String) {
+    let dps = dps.into_iter().zip((0..).into_iter()).collect::<Vec<_>>();
+
+    dps.into_par_iter().for_each(|(mut dp, i)| {
+        dp.compute();
+        dp.save(format!("{filename}_{i}.zst")).unwrap();
+    });
+}
+
+pub fn compute_multiple_save_layered(
+    dps: Vec<DynamicProgram>,
+    time_limit: usize,
+    path: String,
+) -> std::io::Result<()> {
+    let dps_field_types = dps.iter().map(|dp| dp.field_types()).collect::<Vec<_>>();
+    let mut iters = dps.into_iter().map(|dp| dp.into_iter()).collect::<Vec<_>>();
+
+    // Write layer files
+    for t in 0..time_limit {
+        trace!("Generating layer {t}");
+
+        let file = File::create(Path::new(&path).join(format!("layer_{t}.zst")))?;
+        let writer = BufWriter::new(file);
+        let mut encoder = Encoder::new(writer, 9)?;
+        encoder.multithread(4)?;
+        let mut encoder = encoder.auto_finish();
+
+        let layers = iters
+            .par_iter_mut()
+            .map(|iter| iter.next().unwrap())
+            .collect::<Vec<_>>();
+
+        encoder.write(&(time_limit as u64).to_le_bytes())?;
+
+        for layer in layers {
+            for x in 0..2 * time_limit + 1 {
+                for y in 0..2 * time_limit + 1 {
+                    encoder.write(&layer[x][y].to_le_bytes())?;
+                }
+            }
+        }
+    }
+
+    // Write field types for each dp into a single file
+    let file = File::create(Path::new(&path).join("field_types.zst"))?;
+    let writer = BufWriter::new(file);
+    let mut encoder = Encoder::new(writer, 9)?;
+    encoder.multithread(4)?;
+    let mut encoder = encoder.auto_finish();
+
+    encoder.write(&(time_limit as u64).to_le_bytes())?;
+
+    for dp_field_type in dps_field_types {
+        for x in 0..2 * time_limit + 1 {
+            for y in 0..2 * time_limit + 1 {
+                encoder.write(&(dp_field_type[x][y] as u64).to_le_bytes())?;
+            }
+        }
+    }
+
+    Ok(())
+}
 
 #[cfg(test)]
 mod tests {
