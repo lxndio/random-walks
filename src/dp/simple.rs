@@ -2,13 +2,13 @@ use std::borrow::BorrowMut;
 use std::fmt::Debug;
 use std::fs;
 use std::ops::{DerefMut, Range};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::channel;
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
 
 use anyhow::{bail, Context};
-use log::trace;
+use log::{debug, trace};
 use num::traits::ToBytes;
 use num::Zero;
 #[cfg(feature = "plotting")]
@@ -509,58 +509,37 @@ pub fn compute_multiple_save(dps: Vec<DynamicProgram>, filename: String) {
     });
 }
 
-pub fn compute_multiple_save_layered(
-    dps: Vec<DynamicProgram>,
-    time_limit: usize,
-    path: String,
-) -> std::io::Result<()> {
-    let dps_field_types = dps.iter().map(|dp| dp.field_types()).collect::<Vec<_>>();
-    let mut iters = dps.into_iter().map(|dp| dp.into_iter()).collect::<Vec<_>>();
+pub fn compute_multiple_save_layered(dps: Vec<DynamicProgram>, path: String) {
+    let dps = dps.into_iter().zip((0..).into_iter()).collect::<Vec<_>>();
 
-    // Write layer files
-    for t in 0..time_limit {
-        trace!("Generating layer {t}");
+    dps.into_par_iter().for_each(|(mut dp, i)| {
+        debug!("Computing dp {i}");
+        dp.compute();
 
-        let file = File::create(Path::new(&path).join(format!("layer_{t}.zst")))?;
-        let writer = BufWriter::new(file);
-        let mut encoder = Encoder::new(writer, 9)?;
-        encoder.multithread(4)?;
-        let mut encoder = encoder.auto_finish();
+        let (limit_neg, limit_pos) = dp.limits();
 
-        let layers = iters
-            .par_iter_mut()
-            .map(|iter| iter.next().unwrap())
-            .collect::<Vec<_>>();
+        debug!("Saving dp {i}");
+        for t in 0..=limit_pos as usize {
+            if !Path::new(&path).join(format!("{i}")).exists() {
+                fs::create_dir(Path::new(&path).join(format!("{i}")))
+                    .expect("Could not create directory");
+            }
 
-        encoder.write(&(time_limit as u64).to_le_bytes())?;
+            let path = Path::new(&path)
+                .join(format!("{i}"))
+                .join(format!("{t}.dp"));
+            let file = File::create(&path).expect("Could not create file");
+            let mut writer = BufWriter::new(file);
 
-        for layer in layers {
-            for x in 0..2 * time_limit + 1 {
-                for y in 0..2 * time_limit + 1 {
-                    encoder.write(&layer[x][y].to_le_bytes())?;
+            for x in limit_neg..=limit_pos {
+                for y in limit_neg..=limit_pos {
+                    writer
+                        .write(&dp.at(x, y, t).to_le_bytes())
+                        .expect("Could not write to file");
                 }
             }
         }
-    }
-
-    // Write field types for each dp into a single file
-    let file = File::create(Path::new(&path).join("field_types.zst"))?;
-    let writer = BufWriter::new(file);
-    let mut encoder = Encoder::new(writer, 9)?;
-    encoder.multithread(4)?;
-    let mut encoder = encoder.auto_finish();
-
-    encoder.write(&(time_limit as u64).to_le_bytes())?;
-
-    for dp_field_type in dps_field_types {
-        for x in 0..2 * time_limit + 1 {
-            for y in 0..2 * time_limit + 1 {
-                encoder.write(&(dp_field_type[x][y] as u64).to_le_bytes())?;
-            }
-        }
-    }
-
-    Ok(())
+    });
 }
 
 #[cfg(test)]

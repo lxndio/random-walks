@@ -79,9 +79,8 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use zstd::Decoder;
 
-use crate::dp::simple::DynamicProgram;
-
 use self::simple::DynamicProgramLayerIterator;
+use crate::dp::simple::DynamicProgram;
 
 pub mod builder;
 pub mod simple;
@@ -124,17 +123,20 @@ pub struct DynamicProgramDiskVec {
 
 impl DynamicProgramDiskVec {
     pub fn try_new(path: String) -> std::io::Result<Self> {
-        let file = File::open(Path::new(&path).join("layer_0.zst"))?;
-        let reader = BufReader::new(file);
-        let mut decoder = Decoder::new(reader)?;
-
-        let len = glob(Path::new(&path).join("layer_*.zst").to_str().unwrap())
+        let len = glob(Path::new(&path).join(format!("*")).to_str().unwrap())
             .unwrap()
             .count();
 
-        let mut time_limit = [0u8; 8];
-        decoder.read_exact(&mut time_limit)?;
-        let time_limit = u64::from_le_bytes(time_limit) as usize;
+        let time_limit = glob(
+            Path::new(&path)
+                .join(format!("0"))
+                .join(format!("*.dp"))
+                .to_str()
+                .unwrap(),
+        )
+        .unwrap()
+        .count()
+            - 1;
 
         debug!("Initializing dynamic program disk vector with {len} elements and a time limit of {time_limit} time steps");
 
@@ -166,28 +168,19 @@ impl DynamicProgramDiskVec {
 
         trace!("Reading value at ({x}, {y}) at time step {t} for variant {variant} from disk");
 
-        let file = File::open(Path::new(&self.path).join(format!("layer_{t}.zst"))).ok()?;
-        let reader = BufReader::new(file);
-        let mut decoder = Decoder::new(reader).ok()?;
-
-        let mut header = [0u8; 16];
-        decoder.read_exact(&mut header).ok()?;
-
-        // Skip variants until the correct one is reached
-        for i in 0..variant {
-            let mut buf = [0u8; 8];
-            for _ in 0..4 * self.time_limit + 2 {
-                decoder.read_exact(&mut buf).ok()?;
-            }
-        }
-
-        // Read correct variant's layer
+        let file = File::open(
+            Path::new(&self.path)
+                .join(format!("{variant}"))
+                .join(format!("{t}.dp")),
+        )
+        .ok()?;
+        let mut reader = BufReader::new(file);
         let mut layer = vec![vec![0.0; 2 * self.time_limit + 1]; 2 * self.time_limit + 1];
         let mut buf = [0u8; 8];
 
         for x in 0..2 * self.time_limit + 1 {
             for y in 0..2 * self.time_limit + 1 {
-                decoder.read_exact(&mut buf).ok()?;
+                reader.read_exact(&mut buf).ok()?;
                 layer[x][y] = f64::from_le_bytes(buf);
             }
         }

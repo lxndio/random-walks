@@ -13,6 +13,7 @@ pub mod biased_correlated_rw;
 pub mod biased_rw;
 pub mod correlated_rw;
 pub mod generator;
+pub mod half_normal_dist;
 pub mod normal_dist;
 pub mod simple_rw;
 
