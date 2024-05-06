@@ -79,7 +79,6 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use zstd::Decoder;
 
-use self::simple::DynamicProgramLayerIterator;
 use crate::dp::simple::DynamicProgram;
 
 pub mod builder;
@@ -202,6 +201,27 @@ impl DynamicProgramDiskVec {
             Some(value) => value,
             None => default,
         }
+    }
+
+    pub fn try_layer(&self, t: usize, variant: usize) -> Option<Vec<Vec<f64>>> {
+        let file = File::open(
+            Path::new(&self.path)
+                .join(format!("{variant}"))
+                .join(format!("{t}.dp")),
+        )
+        .ok()?;
+        let mut reader = BufReader::new(file);
+        let mut layer = vec![vec![0.0; 2 * self.time_limit + 1]; 2 * self.time_limit + 1];
+        let mut buf = [0u8; 8];
+
+        for x in 0..2 * self.time_limit + 1 {
+            for y in 0..2 * self.time_limit + 1 {
+                reader.read_exact(&mut buf).unwrap();
+                layer[x][y] = f64::from_le_bytes(buf);
+            }
+        }
+
+        Some(layer)
     }
 }
 

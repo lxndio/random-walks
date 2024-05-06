@@ -1,7 +1,7 @@
 //! Provides functionality for creating kernels, as well as pre-defined kernel generators.
 
 use std::fmt::{Debug, Formatter};
-use std::ops::{Div, DivAssign, Index, IndexMut, Mul, MulAssign};
+use std::ops::{Add, Div, DivAssign, Index, IndexMut, Mul, MulAssign};
 
 use anyhow::bail;
 use serde::{Deserialize, Serialize};
@@ -179,6 +179,26 @@ impl Debug for Kernel {
 impl PartialEq for Kernel {
     fn eq(&self, other: &Self) -> bool {
         self.probabilities == other.probabilities
+    }
+}
+
+impl Add for Kernel {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        if self.size() == rhs.size() {
+            let mut new_kernel = self.clone();
+
+            for x in 0..self.size() {
+                for y in 0..self.size() {
+                    new_kernel.probabilities[x][y] += rhs.probabilities[x][y];
+                }
+            }
+
+            new_kernel
+        } else {
+            panic!("both kernels must have the same size for addition");
+        }
     }
 }
 
