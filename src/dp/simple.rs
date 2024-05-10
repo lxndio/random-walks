@@ -289,55 +289,64 @@ impl DynamicPrograms for DynamicProgram {
     #[cfg(not(tarpaulin_include))]
     #[cfg(feature = "plotting")]
     fn heatmap(&self, path: String, t: usize) -> anyhow::Result<()> {
-        let (limit_neg, limit_pos) = self.limits();
-        let coordinate_range = limit_neg as i32..(limit_pos + 1) as i32;
+        let multiplier = 0.075;
+        let table = self.table[t].clone();
+        let size = table.len();
 
-        let root = BitMapBackend::new(&path, (1000, 1000)).into_drawing_area();
-        root.fill(&WHITE).unwrap();
-        let root = root.margin(10, 10, 10, 10);
+        let drawing_area = BitMapBackend::new(&path, (1000, 1000)).into_drawing_area();
 
-        let mut chart = ChartBuilder::on(&root)
-            .caption(format!("Heatmap for t = {}", t), ("sans-serif", 20))
-            .x_label_area_size(40)
-            .y_label_area_size(40)
-            .build_cartesian_2d(coordinate_range.clone(), coordinate_range.clone())?;
+        drawing_area.fill(&WHITE).unwrap();
 
-        chart.configure_mesh().draw()?;
+        let mut ctx = ChartBuilder::on(&drawing_area)
+            .build_cartesian_2d(0.0..size as f64 + 1.0, 0.0..size as f64 + 1.0)
+            .unwrap();
 
-        let iter = self.table[t].iter().enumerate().flat_map(|(x, l)| {
-            l.iter()
-                .enumerate()
-                .map(move |(y, v)| (x as i32 - limit_pos as i32, y as i32 - limit_pos as i32, v))
-        });
+        // ctx.configure_mesh().draw().unwrap();
 
-        let min = iter
-            .clone()
-            .min_by(|(_, _, v1), (_, _, v2)| v1.total_cmp(v2))
-            .context("Could not compute minimum value")?
-            .2;
-        let max = iter
-            .clone()
-            .max_by(|(_, _, v1), (_, _, v2)| v1.total_cmp(v2))
-            .context("Could not compute minimum value")?
-            .2;
+        let min_prob = table
+            .iter()
+            .flatten()
+            .filter(|x| x > &&0.0)
+            .cloned()
+            .fold(f64::INFINITY, f64::min);
+        let max_prob = table
+            .iter()
+            .flatten()
+            .cloned()
+            .fold(f64::NEG_INFINITY, f64::max);
 
-        chart.draw_series(PointSeries::of_element(iter, 1, &BLACK, &|c, s, _st| {
+        let mut data = Vec::new();
+        for i in 0..size {
+            for j in 0..size {
+                let value = table[i][j].powf(multiplier);
+                let value = if value != 0.0 {
+                    1.0 - (value - min_prob) / (max_prob - min_prob)
+                } else {
+                    1.0
+                };
+
+                data.push(((i as f64, j as f64), value));
+            }
+        }
+
+        ctx.draw_series(data.iter().map(|((x, y), value)| {
+            let color = RGBColor(
+                (255.0 * value) as u8,
+                (255.0 * value) as u8,
+                (255.0 * value) as u8,
+            );
+
+            Rectangle::new([(*x, *y), (*x + 1.0, *y + 1.0)], color.filled())
+        }))
+        .unwrap();
+
+        ctx.draw_series(vec![
             Rectangle::new(
-                [(c.0, c.1), (c.0 + s, c.1 + s)],
-                HSLColor(
-                    (*c.2 - min) / (max - min),
-                    0.7,
-                    if c.2.is_zero() {
-                        0.0
-                    } else {
-                        ((*c.2 - min).ln_1p() / (max - min).ln_1p()).clamp(0.1, 1.0)
-                    },
-                )
-                .filled(),
-            )
-        }))?;
-
-        root.present()?;
+                [(0.0, 0.0), (1.0, 1.0)],
+                RED.filled(),
+            ),
+        ])
+        .unwrap();
 
         Ok(())
     }

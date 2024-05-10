@@ -114,10 +114,13 @@ pub enum DynamicProgramError {
     IntoIterOnMultiple,
 }
 
+#[derive(Debug, Clone)]
 pub struct DynamicProgramDiskVec {
     path: String,
     len: usize,
     time_limit: usize,
+    current_t: usize,
+    current_layers: Vec<Vec<Vec<f64>>>,
 }
 
 impl DynamicProgramDiskVec {
@@ -143,6 +146,8 @@ impl DynamicProgramDiskVec {
             path,
             len,
             time_limit,
+            current_t: 0,
+            current_layers: Vec::new(),
         })
     }
 
@@ -166,6 +171,13 @@ impl DynamicProgramDiskVec {
         }
 
         trace!("Reading value at ({x}, {y}) at time step {t} for variant {variant} from disk");
+
+        if self.current_t == t {
+            return Some(
+                self.current_layers[variant][(self.time_limit as isize + x) as usize]
+                    [(self.time_limit as isize + y) as usize],
+            );
+        }
 
         let file = File::open(
             Path::new(&self.path)
@@ -204,6 +216,10 @@ impl DynamicProgramDiskVec {
     }
 
     pub fn try_layer(&self, t: usize, variant: usize) -> Option<Vec<Vec<f64>>> {
+        if self.current_t == t {
+            return Some(self.current_layers[variant].clone());
+        }
+
         let file = File::open(
             Path::new(&self.path)
                 .join(format!("{variant}"))
@@ -223,6 +239,44 @@ impl DynamicProgramDiskVec {
 
         Some(layer)
     }
+
+    // Cache all variants for the current t
+    pub fn try_cache(&mut self, t: usize) -> Option<()> {
+        if t >= self.time_limit {
+            debug!("Time step {t} out of bounds");
+            return None;
+        }
+
+        if t == self.current_t {
+            return Some(());
+        }
+
+        self.current_layers = Vec::new();
+        self.current_t = t;
+
+        for variant in 0..self.len {
+            let file = File::open(
+                Path::new(&self.path)
+                    .join(format!("{variant}"))
+                    .join(format!("{t}.dp")),
+            )
+            .ok()?;
+            let mut reader = BufReader::new(file);
+            let mut layer = vec![vec![0.0; 2 * self.time_limit + 1]; 2 * self.time_limit + 1];
+            let mut buf = [0u8; 8];
+
+            for x in 0..2 * self.time_limit + 1 {
+                for y in 0..2 * self.time_limit + 1 {
+                    reader.read_exact(&mut buf).unwrap();
+                    layer[x][y] = f64::from_le_bytes(buf);
+                }
+            }
+
+            self.current_layers.push(layer);
+        }
+
+        Some(())
+    }
 }
 
 // let (limit_neg, limit_pos) = dp.limits();
@@ -237,6 +291,7 @@ impl DynamicProgramDiskVec {
 //     }
 // }
 
+#[derive(Debug, Clone)]
 pub enum DynamicProgramPool {
     Single(DynamicProgram),
     Multiple(Vec<DynamicProgram>),
