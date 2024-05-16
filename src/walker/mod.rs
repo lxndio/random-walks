@@ -1,12 +1,12 @@
 //! Provides walkers used to generate random walks by using a dynamic program.
 
-pub mod correlated;
-pub mod correlated_fixed_step;
-pub mod correlated_multi_step;
-pub mod land_cover;
-pub mod levy;
-pub mod multi_step;
-pub mod standard;
+// pub mod correlated;
+// pub mod correlated_fixed_step;
+// pub mod correlated_multi_step;
+// pub mod land_cover;
+// pub mod levy;
+// pub mod multi_step;
+// pub mod standard;
 
 use thiserror::Error;
 

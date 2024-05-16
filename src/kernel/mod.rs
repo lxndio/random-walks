@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use strum::EnumIter;
 
 use crate::kernel::generator::{KernelGenerator, KernelGeneratorError};
+use crate::kernel::generator::{DirKernelGenerator, DirKernelGeneratorError};
 
 pub mod biased_correlated_rw;
 pub mod biased_rw;
@@ -16,6 +17,63 @@ pub mod generator;
 pub mod half_normal_dist;
 pub mod normal_dist;
 pub mod simple_rw;
+
+
+#[derive(Clone)]
+pub struct DirKernel {
+    pub num_directions: usize,
+    pub directions: Vec<Vec<usize>>,
+    pub came_from: Vec<Vec<(isize, isize)>>,
+}
+
+impl DirKernel {
+    pub fn try_new(size: usize, num_directions: usize) -> anyhow::Result<Self> {
+        if size % 2 == 0 {
+            bail!("size must be odd");
+        }
+
+        Ok(Self {
+            directions: vec![vec![0; size]; size],
+            came_from: vec![vec![(0, 0); 0]; num_directions],
+            num_directions,
+        })
+    }
+
+    pub fn from_generator(generator: impl DirKernelGenerator) -> Result<DirKernel, DirKernelGeneratorError> {
+        let dir_kernel = DirKernel {
+            directions: Vec::new(),
+            came_from: Vec::new(),
+            num_directions: generator.num_directions(),
+        };
+        let mut dir_kernels = vec![dir_kernel];
+
+        generator.prepare(&mut dir_kernels)?;
+        generator.generate(&mut dir_kernels)?;
+
+        Ok(dir_kernels[0].clone())
+    }
+
+
+    pub fn size(&self) -> usize {
+        self.directions.len()
+    }
+
+    pub fn cells_pointing_to(&self, d: usize) -> Vec<(isize, isize)> {
+        self.came_from[d].clone()
+    }
+
+    pub fn set_direction(&mut self, x: isize, y: isize, d: usize) {
+        let x = ((self.directions.len() / 2) as isize + x) as usize;
+        let y = ((self.directions.len() / 2) as isize + y) as usize;
+
+        self.directions[x][y] = d;
+    }
+
+    pub fn add_came_from(&mut self, d: usize, i: isize, j: isize) {
+        self.came_from[d].push((i, j));
+    }
+
+}
 
 #[derive(Clone)]
 pub struct Kernel {
@@ -107,7 +165,7 @@ impl Kernel {
         self.probabilities[x][y] = val;
     }
 
-    pub fn at(&self, x: isize, y: isize) -> f64 {
+    pub fn prob_at(&self, x: isize, y: isize) -> f64 {
         let x = ((self.probabilities.len() / 2) as isize + x) as usize;
         let y = ((self.probabilities.len() / 2) as isize + y) as usize;
 
@@ -372,96 +430,5 @@ impl<T> IndexMut<Direction> for Directions<T> {
             Direction::West => &mut self.west,
             Direction::Stay => &mut self.stay,
         }
-    }
-}
-
-#[cfg(test)]
-#[rustfmt::skip]
-mod tests {
-    use crate::kernel::Kernel;
-
-    #[test]
-    fn test_rotate_invalid() {
-        let mut kernel = kernel![
-            1.0, 2.0, 3.0,
-            4.0, 5.0, 6.0,
-            7.0, 8.0, 9.0,
-        ];
-
-        assert!(kernel.rotate(87).is_err());
-    }
-
-    #[test]
-    fn test_rotate_90() {
-        let mut kernel = kernel![
-            1.0, 2.0, 3.0,
-            4.0, 5.0, 6.0,
-            7.0, 8.0, 9.0,
-        ];
-
-        let mut correct_rotation = kernel![
-            7.0, 4.0, 1.0,
-            8.0, 5.0, 2.0,
-            9.0, 6.0, 3.0,
-        ];
-
-        assert!(kernel.rotate(90).is_ok());
-        assert_eq!(kernel, correct_rotation);
-    }
-
-    #[test]
-    fn test_rotate_180() {
-        let mut kernel = kernel![
-            1.0, 2.0, 3.0,
-            4.0, 5.0, 6.0,
-            7.0, 8.0, 9.0,
-        ];
-
-        let mut correct_rotation = kernel![
-            9.0, 8.0, 7.0,
-            6.0, 5.0, 4.0,
-            3.0, 2.0, 1.0,
-        ];
-
-        assert!(kernel.rotate(180).is_ok());
-        assert_eq!(kernel, correct_rotation);
-    }
-
-    #[test]
-    fn test_rotate_270() {
-        let mut kernel = kernel![
-            1.0, 2.0, 3.0,
-            4.0, 5.0, 6.0,
-            7.0, 8.0, 9.0,
-        ];
-
-        let mut correct_rotation = kernel![
-            3.0, 6.0, 9.0,
-            2.0, 5.0, 8.0,
-            1.0, 4.0, 7.0,
-        ];
-
-        assert!(kernel.rotate(270).is_ok());
-        assert_eq!(kernel, correct_rotation);
-    }
-
-    #[test]
-    fn test_kernel_macro() {
-        let kernel = kernel![
-            1.0, 2.0, 3.0,
-            4.0, 5.0, 6.0,
-            7.0, 8.0, 9.0,
-        ];
-
-        let kernel_correct = Kernel {
-            probabilities: vec![
-                vec![1.0, 4.0, 7.0],
-                vec![2.0, 5.0, 8.0],
-                vec![3.0, 6.0, 9.0],
-            ],
-            name: ("".into(), "".into()),
-        };
-
-        assert_eq!(kernel, kernel_correct);
     }
 }

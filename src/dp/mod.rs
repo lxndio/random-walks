@@ -27,10 +27,11 @@
 //! ```
 //! use randomwalks_lib::dp::builder::DynamicProgramBuilder;
 //! use randomwalks_lib::kernel::Kernel;
+//! use randomwalks_lib::kernel::correleated_rw::CorrelatedRwGenerator;
 //! use randomwalks_lib::kernel::simple_rw::SimpleRwGenerator;
 //!
 //! let dp = DynamicProgramBuilder::new()
-//!     .simple()
+//!     .correlated()
 //!     .time_limit(400)
 //!     .kernel(Kernel::from_generator(SimpleRwGenerator).unwrap())
 //!     .build()
@@ -79,10 +80,10 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use zstd::Decoder;
 
-use crate::dp::simple::DynamicProgram;
+use crate::dp::correlated::CorDynamicProgram;
 
 pub mod builder;
-pub mod simple;
+pub mod correlated;
 
 pub trait DynamicPrograms {
     fn limits(&self) -> (isize, isize);
@@ -94,9 +95,9 @@ pub trait DynamicPrograms {
     fn field_types(&self) -> Vec<Vec<usize>>;
 
     #[cfg(feature = "plotting")]
-    fn heatmap(&self, path: String, t: usize) -> anyhow::Result<()>;
+    fn heatmap(&self, path: String, d: usize, t: usize) -> anyhow::Result<()>;
 
-    fn print(&self, t: usize);
+    fn print(&self, d: usize, t: usize);
 
     fn save(&self, filename: String) -> std::io::Result<()>;
 }
@@ -118,9 +119,10 @@ pub enum DynamicProgramError {
 pub struct DynamicProgramDiskVec {
     path: String,
     len: usize,
+    n_directions: usize,
     time_limit: usize,
     current_t: usize,
-    current_layers: Vec<Vec<Vec<f64>>>,
+    current_layers: Vec<Vec<Vec<Vec<f64>>>>,
 }
 
 impl DynamicProgramDiskVec {
@@ -140,11 +142,14 @@ impl DynamicProgramDiskVec {
         .count()
             - 1;
 
+        let n_directions: usize = 16;
+
         debug!("Initializing dynamic program disk vector with {len} elements and a time limit of {time_limit} time steps");
 
         Ok(Self {
             path,
             len,
+            n_directions,
             time_limit,
             current_t: 0,
             current_layers: Vec::new(),
@@ -159,7 +164,7 @@ impl DynamicProgramDiskVec {
         self.time_limit
     }
 
-    pub fn try_at(&self, x: isize, y: isize, t: usize, variant: usize) -> Option<f64> {
+    pub fn try_at(&self, x: isize, y: isize, d: usize, t: usize, variant: usize) -> Option<f64> {
         if t >= self.time_limit {
             debug!("Time step {t} out of bounds");
             return None;
@@ -174,7 +179,7 @@ impl DynamicProgramDiskVec {
 
         if self.current_t == t {
             return Some(
-                self.current_layers[variant][(self.time_limit as isize + x) as usize]
+                self.current_layers[variant][d][(self.time_limit as isize + x) as usize]
                     [(self.time_limit as isize + y) as usize],
             );
         }
@@ -201,23 +206,31 @@ impl DynamicProgramDiskVec {
         )
     }
 
-    pub fn at(&self, x: isize, y: isize, t: usize, variant: usize) -> f64 {
-        match self.try_at(x, y, t, variant) {
+    pub fn at(&self, x: isize, y: isize, d: usize, t: usize, variant: usize) -> f64 {
+        match self.try_at(x, y, d, t, variant) {
             Some(value) => value,
             None => panic!("Could not read value from dynamic program disk vector"),
         }
     }
 
-    pub fn at_or(&self, x: isize, y: isize, t: usize, variant: usize, default: f64) -> f64 {
-        match self.try_at(x, y, t, variant) {
+    pub fn at_or(
+        &self,
+        x: isize,
+        y: isize,
+        d: usize,
+        t: usize,
+        variant: usize,
+        default: f64,
+    ) -> f64 {
+        match self.try_at(x, y, d, t, variant) {
             Some(value) => value,
             None => default,
         }
     }
 
-    pub fn try_layer(&self, t: usize, variant: usize) -> Option<Vec<Vec<f64>>> {
+    pub fn try_layer(&self, d: usize, t: usize, variant: usize) -> Option<Vec<Vec<f64>>> {
         if self.current_t == t {
-            return Some(self.current_layers[variant].clone());
+            return Some(self.current_layers[d][variant].clone());
         }
 
         let file = File::open(
@@ -262,13 +275,17 @@ impl DynamicProgramDiskVec {
             )
             .ok()?;
             let mut reader = BufReader::new(file);
-            let mut layer = vec![vec![0.0; 2 * self.time_limit + 1]; 2 * self.time_limit + 1];
+            let mut layer = vec![
+                vec![vec![0.0; 2 * self.time_limit + 1]; 2 * self.time_limit + 1];
+                self.n_directions
+            ];
             let mut buf = [0u8; 8];
-
-            for x in 0..2 * self.time_limit + 1 {
-                for y in 0..2 * self.time_limit + 1 {
-                    reader.read_exact(&mut buf).unwrap();
-                    layer[x][y] = f64::from_le_bytes(buf);
+            for d in 0..self.n_directions {
+                for x in 0..2 * self.time_limit + 1 {
+                    for y in 0..2 * self.time_limit + 1 {
+                        reader.read_exact(&mut buf).unwrap();
+                        layer[d][x][y] = f64::from_le_bytes(buf);
+                    }
                 }
             }
 
@@ -293,31 +310,37 @@ impl DynamicProgramDiskVec {
 
 #[derive(Debug, Clone)]
 pub enum DynamicProgramPool {
-    Single(DynamicProgram),
-    Multiple(Vec<DynamicProgram>),
-    MultipleFromDisk(DynamicProgramDiskVec),
+    Single(CorDynamicProgram),
+    // Multiple(Vec<DynamicProgram>),
+    // MultipleFromDisk(DynamicProgramDiskVec),
 }
 
 #[cfg(not(tarpaulin_include))]
 impl DynamicProgramPool {
-    pub fn try_unwrap(&self) -> Result<&DynamicProgram, DynamicProgramError> {
+    pub fn try_unwrap(&self) -> Result<&CorDynamicProgram, DynamicProgramError> {
         match self {
             DynamicProgramPool::Single(single) => Ok(single),
             _ => Err(DynamicProgramError::UnwrapOnMultiple),
         }
     }
 
-    pub fn try_unwrap_mut(&mut self) -> Result<&mut DynamicProgram, DynamicProgramError> {
-        match self {
-            DynamicProgramPool::Single(single) => Ok(single),
-            _ => Err(DynamicProgramError::UnwrapOnMultiple),
-        }
-    }
+    // pub fn try_unwrap_mut(&mut self) -> Result<&mut DynamicProgram, DynamicProgramError> {
+    //     match self {
+    //         DynamicProgramPool::Single(single) => Ok(single),
+    //         _ => Err(DynamicProgramError::UnwrapOnMultiple),
+    //     }
+    // }
 
-    pub fn try_into(self) -> Result<DynamicProgram, DynamicProgramError> {
+    // pub fn try_into(self) -> Result<DynamicProgram, DynamicProgramError> {
+    //     match self {
+    //         DynamicProgramPool::Single(single) => Ok(single),
+    //         _ => Err(DynamicProgramError::UnwrapOnMultiple),
+    //     }
+    // }
+
+    pub fn get_num_directions(&self) -> Result<usize, DynamicProgramError> {
         match self {
-            DynamicProgramPool::Single(single) => Ok(single),
-            _ => Err(DynamicProgramError::UnwrapOnMultiple),
+            DynamicProgramPool::Single(single) => Ok(single.get_num_directions()),
         }
     }
 
@@ -325,13 +348,14 @@ impl DynamicProgramPool {
         &self,
         x: isize,
         y: isize,
+        d: usize,
         t: usize,
         variant: usize,
     ) -> Result<f64, DynamicProgramError> {
         match self {
-            DynamicProgramPool::Single(single) => Ok(single.at(x, y, t)),
-            DynamicProgramPool::Multiple(multiple) => Ok(multiple[variant].at(x, y, t)),
-            DynamicProgramPool::MultipleFromDisk(disk_vec) => Ok(disk_vec.at(x, y, t, variant)),
+            DynamicProgramPool::Single(single) => Ok(single.at(x, y, d, t)),
+            // DynamicProgramPool::Multiple(multiple) => Ok(multiple[variant].at(x, y, t)),
+            // DynamicProgramPool::MultipleFromDisk(disk_vec) => Ok(disk_vec.at(x, y, d, t, variant)),
         }
     }
 
@@ -339,16 +363,17 @@ impl DynamicProgramPool {
         &self,
         x: isize,
         y: isize,
+        d: usize,
         t: usize,
         variant: usize,
         default: f64,
     ) -> Result<f64, DynamicProgramError> {
         match self {
-            DynamicProgramPool::Single(single) => Ok(single.at_or(x, y, t, default)),
-            DynamicProgramPool::Multiple(multiple) => Ok(multiple[variant].at_or(x, y, t, default)),
-            DynamicProgramPool::MultipleFromDisk(disk_vec) => {
-                Ok(disk_vec.at_or(x, y, t, variant, default))
-            }
+            DynamicProgramPool::Single(single) => Ok(single.at_or(x, y, d, t, default)),
+            // DynamicProgramPool::Multiple(multiple) => Ok(multiple[variant].at_or(x, y, t, default)),
+            // DynamicProgramPool::MultipleFromDisk(disk_vec) => {
+            //     Ok(disk_vec.at_or(x, y, d, t, variant, default))
+            // }
         }
     }
 }
@@ -364,13 +389,13 @@ impl DynamicPrograms for DynamicProgramPool {
     /// Wrapper for `SimpleDynamicProgram::compute()`. Fails if called on a `DynamicProgramPool`
     /// holding multiple dynamic programs.
     fn compute(&mut self) {
-        self.try_unwrap_mut().unwrap().compute()
+        // self.try_unwrap_mut().unwrap().compute()
     }
 
     /// Wrapper for `SimpleDynamicProgram::compute_parallel()`. Fails if called on a
     /// `DynamicProgramPool` holding multiple dynamic programs.
     fn compute_parallel(&mut self) {
-        self.try_unwrap_mut().unwrap().compute_parallel()
+        // self.try_unwrap_mut().unwrap().compute_parallel()
     }
 
     /// Wrapper for `SimpleDynamicProgram::field_types()`. Fails if called on a `DynamicProgramPool`
@@ -382,14 +407,14 @@ impl DynamicPrograms for DynamicProgramPool {
     /// Wrapper for `SimpleDynamicProgram::heatmap()`. Fails if called on a `DynamicProgramPool`
     /// holding multiple dynamic programs.
     #[cfg(feature = "plotting")]
-    fn heatmap(&self, path: String, t: usize) -> anyhow::Result<()> {
-        self.try_unwrap().unwrap().heatmap(path, t)
+    fn heatmap(&self, path: String, d: usize, t: usize) -> anyhow::Result<()> {
+        self.try_unwrap().unwrap().heatmap(path, d, t)
     }
 
     /// Wrapper for `SimpleDynamicProgram::print()`. Fails if called on a `DynamicProgramPool`
     /// holding multiple dynamic programs.
-    fn print(&self, t: usize) {
-        self.try_unwrap().unwrap().print(t)
+    fn print(&self, d: usize, t: usize) {
+        self.try_unwrap().unwrap().print(d, t)
     }
 
     /// Wrapper for `SimpleDynamicProgram::save()`. Fails if called on a `DynamicProgramPool`

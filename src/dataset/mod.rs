@@ -139,7 +139,6 @@
 pub mod builder;
 pub mod loader;
 pub mod point;
-pub mod walks_builder;
 
 use std::collections::HashMap;
 
@@ -158,7 +157,6 @@ use time::PrimitiveDateTime;
 use crate::dataset::loader::{CoordinateType, DatasetLoader};
 use crate::dp::{DynamicProgramPool, DynamicPrograms};
 use crate::walk::Walk;
-use crate::walker::Walker;
 use crate::xy;
 
 /// A filter that can be applied to a [`Dataset`] by calling [`Dataset::filter`].
@@ -460,118 +458,118 @@ impl Dataset {
         Ok(())
     }
 
-    pub fn rw_between(
-        &self,
-        dp: &DynamicProgramPool,
-        walker: &Box<dyn Walker>,
-        from: usize,
-        to: usize,
-        time_steps: usize,
-        auto_scale: bool,
-        extra_steps: usize,
-    ) -> anyhow::Result<Walk> {
-        let from = &self.get(from).context("from index out of bounds.")?.point;
-        let to = &self.get(to).context("to index out of bounds.")?.point;
+    // pub fn rw_between(
+    //     &self,
+    //     dp: &DynamicProgramPool,
+    //     walker: &Box<dyn Walker>,
+    //     from: usize,
+    //     to: usize,
+    //     time_steps: usize,
+    //     auto_scale: bool,
+    //     extra_steps: usize,
+    // ) -> anyhow::Result<Walk> {
+    //     let from = &self.get(from).context("from index out of bounds.")?.point;
+    //     let to = &self.get(to).context("to index out of bounds.")?.point;
 
-        let Point::XY(from) = *from else {
-            bail!("Points have to be in XY coordinates.");
-        };
-        let Point::XY(to) = *to else {
-            bail!("Points have to be in XY coordinates.");
-        };
+    //     let Point::XY(from) = *from else {
+    //         bail!("Points have to be in XY coordinates.");
+    //     };
+    //     let Point::XY(to) = *to else {
+    //         bail!("Points have to be in XY coordinates.");
+    //     };
 
-        // Translate `to`, s.t. it still has the same relative position from `from`, under the
-        // condition that `from` is (0, 0)
-        let mut translated_to = to - from;
+    //     // Translate `to`, s.t. it still has the same relative position from `from`, under the
+    //     // condition that `from` is (0, 0)
+    //     let mut translated_to = to - from;
 
-        let mut scale = 0.0;
-        let dist = (translated_to.x.abs() + translated_to.y.abs()) as u64;
+    //     let mut scale = 0.0;
+    //     let dist = (translated_to.x.abs() + translated_to.y.abs()) as u64;
 
-        if auto_scale && dist as usize > time_steps - extra_steps {
-            // scale = (dist as f64 + extra_steps as f64) / (time_steps - 1) as f64;
-            scale = dist as f64 / (time_steps - 1 - extra_steps) as f64;
-            translated_to = xy!(
-                (translated_to.x as f64 / scale) as i64,
-                (translated_to.y as f64 / scale) as i64
-            );
-        }
+    //     if auto_scale && dist as usize > time_steps - extra_steps {
+    //         // scale = (dist as f64 + extra_steps as f64) / (time_steps - 1) as f64;
+    //         scale = dist as f64 / (time_steps - 1 - extra_steps) as f64;
+    //         translated_to = xy!(
+    //             (translated_to.x as f64 / scale) as i64,
+    //             (translated_to.y as f64 / scale) as i64
+    //         );
+    //     }
 
-        // Check if `to` is still at a position where the walk can be computed with the given
-        // dynamic program
-        let (_, limit_pos) = dp.limits();
+    //     // Check if `to` is still at a position where the walk can be computed with the given
+    //     // dynamic program
+    //     let (_, limit_pos) = dp.limits();
 
-        if translated_to.x.abs() > limit_pos as i64 || translated_to.y.abs() > limit_pos as i64 {
-            bail!("start and end point too far apart for given dynamic program");
-        }
+    //     if translated_to.x.abs() > limit_pos as i64 || translated_to.y.abs() > limit_pos as i64 {
+    //         bail!("start and end point too far apart for given dynamic program");
+    //     }
 
-        let walk = walker
-            .generate_path(
-                dp,
-                translated_to.x as isize,
-                translated_to.y as isize,
-                time_steps,
-            )
-            .context("error while generating random walk path")?;
+    //     let walk = walker
+    //         .generate_path(
+    //             dp,
+    //             translated_to.x as isize,
+    //             translated_to.y as isize,
+    //             time_steps,
+    //         )
+    //         .context("error while generating random walk path")?;
 
-        // Translate all coordinates in walk back to original coordinates
-        if auto_scale && dist as usize > time_steps - extra_steps {
-            Ok(walk
-                .iter()
-                .map(|p| {
-                    (
-                        (p.x as f64 * scale) as i64 + from.x(),
-                        (p.y as f64 * scale) as i64 + from.y(),
-                    )
-                        .into()
-                })
-                .collect())
-        } else {
-            Ok(walk
-                .iter()
-                .map(|p| (p.x + from.x(), p.y + from.y()).into())
-                .collect())
-        }
-    }
+    //     // Translate all coordinates in walk back to original coordinates
+    //     if auto_scale && dist as usize > time_steps - extra_steps {
+    //         Ok(walk
+    //             .iter()
+    //             .map(|p| {
+    //                 (
+    //                     (p.x as f64 * scale) as i64 + from.x(),
+    //                     (p.y as f64 * scale) as i64 + from.y(),
+    //                 )
+    //                     .into()
+    //             })
+    //             .collect())
+    //     } else {
+    //         Ok(walk
+    //             .iter()
+    //             .map(|p| (p.x + from.x(), p.y + from.y()).into())
+    //             .collect())
+    //     }
+    // }
 
-    pub fn rw_between_intermediate(
-        &self,
-        dp: &DynamicProgramPool,
-        walker: &Box<dyn Walker>,
-        from: usize,
-        to: usize,
-        time_steps: usize,
-        auto_scale: bool,
-        intermediate_points_qty: u64,
-    ) -> anyhow::Result<Walk> {
-        let mut walk = Vec::new();
-        let mut dataset = Dataset::new(CoordinateType::XY);
+    // pub fn rw_between_intermediate(
+    //     &self,
+    //     dp: &DynamicProgramPool,
+    //     walker: &Box<dyn Walker>,
+    //     from: usize,
+    //     to: usize,
+    //     time_steps: usize,
+    //     auto_scale: bool,
+    //     intermediate_points_qty: u64,
+    // ) -> anyhow::Result<Walk> {
+    //     let mut walk = Vec::new();
+    //     let mut dataset = Dataset::new(CoordinateType::XY);
 
-        let intermediate_points = self.rw_between(
-            dp,
-            walker,
-            from,
-            to,
-            intermediate_points_qty as usize,
-            true,
-            100,
-        )?;
-        let mut intermediate = intermediate_points
-            .iter()
-            .map(|x| Datapoint {
-                point: Point::XY(*x),
-                metadata: HashMap::new(),
-            })
-            .collect();
+    //     let intermediate_points = self.rw_between(
+    //         dp,
+    //         walker,
+    //         from,
+    //         to,
+    //         intermediate_points_qty as usize,
+    //         true,
+    //         100,
+    //     )?;
+    //     let mut intermediate = intermediate_points
+    //         .iter()
+    //         .map(|x| Datapoint {
+    //             point: Point::XY(*x),
+    //             metadata: HashMap::new(),
+    //         })
+    //         .collect();
 
-        dataset.data.append(&mut intermediate);
+    //     dataset.data.append(&mut intermediate);
 
-        for i in 0..intermediate_points.len() - 1 {
-            let mut w = dataset.rw_between(dp, walker, i, i + 1, time_steps, auto_scale, 0)?;
-            walk.append(&mut w.0);
-        }
+    //     for i in 0..intermediate_points.len() - 1 {
+    //         let mut w = dataset.rw_between(dp, walker, i, i + 1, time_steps, auto_scale, 0)?;
+    //         walk.append(&mut w.0);
+    //     }
 
-        Ok(Walk(walk))
-    }
+    //     Ok(Walk(walk))
+    // }
 
     pub fn direct_between(&self, from: usize, to: usize) -> anyhow::Result<Walk> {
         let from = &self.get(from).context("from index out of bounds.")?.point;

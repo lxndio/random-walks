@@ -70,9 +70,11 @@ use num::Zero;
 use thiserror::Error;
 
 use crate::dataset::point::XYPoint;
-use crate::dp::simple::DynamicProgram;
+// use crate::dp::simple::DynamicProgram;
+use crate::dp::correlated::CorDynamicProgram;
 use crate::dp::{DynamicProgramPool, DynamicProgramType};
 use crate::kernel;
+use crate::kernel::DirKernel;
 use crate::kernel::Kernel;
 
 /// An error that can occur when using a [`DynamicProgramBuilder`].
@@ -93,6 +95,11 @@ pub enum DynamicProgramBuilderError {
     /// [`kernels()`](DynamicProgramBuilder::kernels).
     #[error("kernels must be set")]
     NoKernelsSet,
+
+    /// This error occurs when no dir_kernels were set using
+    /// [`kernels()`](DynamicProgramBuilder::dir_kernel).
+    #[error("direction kernel must be set")]
+    NoDirKernelsSet,
 
     /// This error occurs when [`multi()`](DynamicProgramBuilder::multi) was used, but only
     /// a single kernel was given using [`kernel()`](DynamicProgramBuilder::kernel). Use
@@ -127,8 +134,10 @@ pub enum DynamicProgramBuilderError {
 #[derive(Default)]
 pub struct DynamicProgramBuilder {
     time_limit: Option<usize>,
+    num_directions: Option<usize>,
     dp_type: Option<DynamicProgramType>,
     kernels: Option<Vec<(usize, Kernel)>>,
+    dir_kernel: Option<DirKernel>,
     field_types: Option<Vec<Vec<usize>>>,
     barriers: Vec<XYPoint>,
 }
@@ -166,6 +175,13 @@ impl DynamicProgramBuilder {
     /// Sets the time limit for the dynamic program.
     pub fn time_limit(mut self, time_limit: usize) -> Self {
         self.time_limit = Some(time_limit);
+
+        self
+    }
+
+    /// Sets the number of directions for the dynamic program.
+    pub fn num_directions(mut self, num_directions: usize) -> Self {
+        self.num_directions = Some(num_directions);
 
         self
     }
@@ -218,7 +234,12 @@ impl DynamicProgramBuilder {
         let Some(time_limit) = self.time_limit else {
             return Err(DynamicProgramBuilderError::NoTimeLimitSet);
         };
+
         let Some(dp_type) = self.dp_type else {
+            return Err(DynamicProgramBuilderError::NoTypeSet);
+        };
+
+        let Some(num_directions) = self.num_directions else {
             return Err(DynamicProgramBuilderError::NoTypeSet);
         };
 
@@ -229,6 +250,10 @@ impl DynamicProgramBuilder {
 
         let Some(mut kernels) = self.kernels else {
             return Err(DynamicProgramBuilderError::NoKernelsSet);
+        };
+
+        let Some(mut dir_kernel) = self.dir_kernel else {
+            return Err(DynamicProgramBuilderError::NoDirKernelsSet);
         };
 
         // Map field types to contiguous value range
@@ -269,13 +294,18 @@ impl DynamicProgramBuilder {
             field_types[x][y] = i;
         }
 
-        Ok(DynamicProgramPool::Single(DynamicProgram {
+        Ok(DynamicProgramPool::Single(CorDynamicProgram {
             table: vec![
-                vec![vec![Zero::zero(); 2 * time_limit + 1]; 2 * time_limit + 1];
+                vec![
+                    vec![vec![Zero::zero(); 2 * time_limit + 1]; 2 * time_limit + 1];
+                    num_directions
+                ];
                 time_limit + 1
             ],
             time_limit,
+            num_directions,
             kernels: kernels_mapped,
+            dir_kernel,
             field_types,
         }))
     }

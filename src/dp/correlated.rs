@@ -27,71 +27,76 @@ use {
 use crate::dp::builder::DynamicProgramBuilder;
 use crate::dp::{DynamicProgramPool, DynamicPrograms};
 use crate::kernel;
+use crate::kernel::DirKernel;
 use crate::kernel::Kernel;
 
 #[derive(Clone)]
-pub struct DynamicProgram {
-    pub(crate) table: Vec<Vec<Vec<f64>>>,
-    pub(crate) time_limit: usize,
-    pub(crate) kernels: Vec<Kernel>,
-    pub(crate) field_types: Vec<Vec<usize>>,
+pub struct CorDynamicProgram {
+    pub/*(crate)*/ table: Vec<Vec<Vec<Vec<f64>>>>,
+    pub/*(crate)*/ time_limit: usize,
+    pub/*(crate)*/ num_directions: usize,
+    pub/*(crate)*/ kernels: Vec<Kernel>,
+    pub/*(crate)*/ field_types: Vec<Vec<usize>>,
+    pub/*(crate)*/ dir_kernel: DirKernel,
 }
 
-impl DynamicProgram {
-    pub fn at(&self, x: isize, y: isize, t: usize) -> f64 {
+impl CorDynamicProgram {
+    pub fn at(&self, x: isize, y: isize, d: usize, t: usize) -> f64 {
         let x = (self.time_limit as isize + x) as usize;
         let y = (self.time_limit as isize + y) as usize;
 
-        self.table[t][x][y]
+        self.table[t][d][x][y]
     }
 
-    pub fn at_or(&self, x: isize, y: isize, t: usize, default: f64) -> f64 {
+    pub fn at_or(&self, x: isize, y: isize, d: usize, t: usize, default: f64) -> f64 {
         let (limit_neg, limit_pos) = self.limits();
 
         if x >= limit_neg && x <= limit_pos && y >= limit_neg && y <= limit_pos {
             let x = (self.time_limit as isize + x) as usize;
             let y = (self.time_limit as isize + y) as usize;
 
-            self.table[t][x][y]
+            self.table[t][d][x][y]
         } else {
             default
         }
     }
 
-    pub fn set(&mut self, x: isize, y: isize, t: usize, val: f64) {
+    pub fn set(&mut self, x: isize, y: isize, d: usize, t: usize, val: f64) {
         let x = (self.time_limit as isize + x) as usize;
         let y = (self.time_limit as isize + y) as usize;
 
-        self.table[t][x][y] = val;
+        self.table[t][d][x][y] = val;
     }
 
-    fn apply_kernel_at(&mut self, x: isize, y: isize, t: usize) {
-        let field_type = self.field_type_at(x, y);
-        let kernel = self.kernels[field_type].clone();
+    fn apply_kernel_at(&mut self, x: isize, y: isize, d: usize, t: usize) {
+        let kernel = self.kernels[d].clone();
+
+        // Is this important?
+        let dir_kernel = self.dir_kernel.clone();
 
         let ks = (kernel.size() / 2) as isize;
         let (limit_neg, limit_pos) = self.limits();
         let mut sum = 0.0;
 
-        for i in x - ks..=x + ks {
-            if i < limit_neg || i > limit_pos {
-                continue;
-            }
+        for di in 0..self.num_directions as usize {
+            
+            for (prev_kernel_x, prev_kernel_y) in dir_kernel.cells_pointing_to(d) {
 
-            for j in y - ks..=y + ks {
-                if j < limit_neg || j > limit_pos {
+                let i = x + prev_kernel_x;
+                let j = y + prev_kernel_y;
+
+                if i < limit_neg || i > limit_pos || j < limit_neg || j > limit_pos {
                     continue;
                 }
 
-                // Kernel coordinates are inverted offset, i.e. -(i - x) and -(j - y)
                 let kernel_x = x - i;
                 let kernel_y = y - j;
 
-                sum += self.at(i, j, t - 1) * kernel.at(kernel_x, kernel_y);
+                sum += self.at(i, j, di, t-1) * self.kernels[di].prob_at(kernel_x, kernel_y);
             }
         }
 
-        self.set(x, y, t, sum);
+        self.set(x, y, d, t, sum);
     }
 
     fn field_type_at(&self, x: isize, y: isize) -> usize {
@@ -108,8 +113,12 @@ impl DynamicProgram {
         self.field_types[x][y] = val;
     }
 
+    pub fn get_num_directions(&self) -> usize {
+        self.num_directions
+    }
+
     #[cfg(feature = "saving")]
-    pub fn load(filename: String) -> anyhow::Result<DynamicProgramPool> {
+    pub fn load(filename: String, kernels: Vec<Kernel>, dir_kernel: DirKernel) -> anyhow::Result<DynamicProgramPool> {
         let file = File::open(filename)?;
         let reader = BufReader::new(file);
         let mut decoder = Decoder::new(reader).context("could not create decoder")?;
@@ -118,25 +127,48 @@ impl DynamicProgram {
         let time_limit = match decoder.read_exact(&mut time_limit) {
             Ok(()) => u64::from_le_bytes(time_limit),
             Err(_) => bail!("could not read time limit from file"),
+        } as usize;
+        let mut num_directions = [0u8; 8];
+        let num_directions = match decoder.read_exact(&mut num_directions) {
+            Ok(()) => u64::from_le_bytes(num_directions),
+            Err(_) => bail!("could not read num_directions from file"),
         };
 
-        let DynamicProgramPool::Single(mut dp) = DynamicProgramBuilder::new()
-            .simple()
-            .time_limit(time_limit as usize)
-            .kernel(kernel!(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0))
-            .build()?
-        else {
-            unreachable!();
+        
+        let mut dp = CorDynamicProgram {
+            table: vec![
+                vec![
+                    vec![vec![0.0; 2 * time_limit + 1]; 2 * time_limit + 1];
+                    16
+                ];
+                time_limit + 1
+            ],
+            time_limit,
+            num_directions: 16,
+            kernels,
+            field_types: vec![vec![0; 2 * time_limit + 1]; 2 * time_limit + 1],
+            dir_kernel,
         };
+
+        // let DynamicProgramPool::Single(mut dp) = DynamicProgramBuilder::new()
+        //     .simple()
+        //     .time_limit(time_limit as usize)
+        //     .kernel(kernel!(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0))
+        //     .build()?
+        // else {
+        //     unreachable!();
+        // };
 
         let (limit_neg, limit_pos) = dp.limits();
         let mut buf = [0u8; 8];
 
         for t in 0..=limit_pos as usize {
-            for x in limit_neg..=limit_pos {
-                for y in limit_neg..=limit_pos {
-                    decoder.read_exact(&mut buf)?;
-                    dp.set(x, y, t, f64::from_le_bytes(buf));
+            for d in 0..num_directions as usize {
+                for x in limit_neg..=limit_pos {
+                    for y in limit_neg..=limit_pos {
+                        decoder.read_exact(&mut buf)?;
+                        dp.set(x, y, d, t, f64::from_le_bytes(buf));
+                    }
                 }
             }
         }
@@ -151,19 +183,20 @@ impl DynamicProgram {
         Ok(DynamicProgramPool::Single(dp))
     }
 
-    pub fn into_iter(self) -> DynamicProgramLayerIterator {
-        DynamicProgramLayerIterator {
-            last_layer: Vec::new(),
-            layer: 0,
-            dp: None,
-            time_limit: self.time_limit,
-            kernels: self.kernels,
-            field_types: self.field_types,
-        }
-    }
+
+    // pub fn into_iter(self) -> DynamicProgramLayerIterator {
+    //     DynamicProgramLayerIterator {
+    //         last_layer: Vec::new(),
+    //         layer: 0,
+    //         dp: None,
+    //         time_limit: self.time_limit,
+    //         kernels: self.kernels,
+    //         field_types: self.field_types,
+    //     }
+    // }
 }
 
-impl DynamicPrograms for DynamicProgram {
+impl DynamicPrograms for CorDynamicProgram {
     #[cfg(not(tarpaulin_include))]
     fn limits(&self) -> (isize, isize) {
         (-(self.time_limit as isize), self.time_limit as isize)
@@ -172,18 +205,20 @@ impl DynamicPrograms for DynamicProgram {
     fn compute(&mut self) {
         let (limit_neg, limit_pos) = self.limits();
 
-        self.set(0, 0, 0, 1.0);
+        self.set(0, 0, 0, 0, 1.0);
 
         let start = Instant::now();
 
         for t in 1..=limit_pos as usize {
-            if t % 50 == 0 {
+            if t % 10 == 0 {
                 println!("t: {t}");
             }
 
-            for x in limit_neg..=limit_pos {
-                for y in limit_neg..=limit_pos {
-                    self.apply_kernel_at(x, y, t);
+            for d in 0..self.num_directions as usize {
+                for x in limit_neg..=limit_pos {
+                    for y in limit_neg..=limit_pos {
+                        self.apply_kernel_at(x, y, d, t);
+                    }
                 }
             }
         }
@@ -194,91 +229,91 @@ impl DynamicPrograms for DynamicProgram {
     }
 
     fn compute_parallel(&mut self) {
-        let (limit_neg, limit_pos) = self.limits();
-        let kernels = Arc::new(RwLock::new(self.kernels.clone()));
-        let field_types = Arc::new(RwLock::new(self.field_types.clone()));
-        let pool = Pool::<ThunkWorker<(Range<isize>, Range<isize>, Vec<Vec<f64>>)>>::new(10);
-        let (tx, rx) = channel();
+        // let (limit_neg, limit_pos) = self.limits();
+        // let kernels = Arc::new(RwLock::new(self.kernels.clone()));
+        // let field_types = Arc::new(RwLock::new(self.field_types.clone()));
+        // let pool = Pool::<ThunkWorker<(Range<isize>, Range<isize>, Vec<Vec<f64>>)>>::new(10);
+        // let (tx, rx) = channel();
 
-        // Define chunks
+        // // Define chunks
 
-        let chunk_size = ((self.time_limit + 1) / 3) as isize;
-        let mut ranges = Vec::new();
+        // let chunk_size = ((self.time_limit + 1) / 3) as isize;
+        // let mut ranges = Vec::new();
 
-        for i in 0..3 - 1 {
-            ranges.push((limit_neg + i * chunk_size..limit_neg + (i + 1) * chunk_size));
-        }
+        // for i in 0..3 - 1 {
+        //     ranges.push((limit_neg + i * chunk_size..limit_neg + (i + 1) * chunk_size));
+        // }
 
-        ranges.push(limit_neg + 2 * chunk_size..limit_pos + 1);
-        let mut chunks = Vec::new();
+        // ranges.push(limit_neg + 2 * chunk_size..limit_pos + 1);
+        // let mut chunks = Vec::new();
 
-        for x in 0..3 {
-            for y in 0..3 {
-                chunks.push((ranges[x].clone(), ranges[y].clone()));
-            }
-        }
+        // for x in 0..3 {
+        //     for y in 0..3 {
+        //         chunks.push((ranges[x].clone(), ranges[y].clone()));
+        //     }
+        // }
 
-        self.set(0, 0, 0, 1.0);
+        // self.set(0, 0, 0, 1.0);
 
-        let start = Instant::now();
+        // let start = Instant::now();
 
-        for t in 1..=limit_pos as usize {
-            let table_old = Arc::new(RwLock::new(self.table[t - 1].clone()));
+        // for t in 1..=limit_pos as usize {
+        //     let table_old = Arc::new(RwLock::new(self.table[t - 1].clone()));
 
-            for (x_range, y_range) in chunks.clone() {
-                let kernels = kernels.clone();
-                let field_types = field_types.clone();
-                let table_old = table_old.clone();
+        //     for (x_range, y_range) in chunks.clone() {
+        //         let kernels = kernels.clone();
+        //         let field_types = field_types.clone();
+        //         let table_old = table_old.clone();
 
-                pool.execute_to(
-                    tx.clone(),
-                    Thunk::of(move || {
-                        let mut probs = vec![vec![0.0; y_range.len()]; x_range.len()];
-                        let (mut i, mut j) = (0, 0);
+        //         pool.execute_to(
+        //             tx.clone(),
+        //             Thunk::of(move || {
+        //                 let mut probs = vec![vec![0.0; y_range.len()]; x_range.len()];
+        //                 let (mut i, mut j) = (0, 0);
 
-                        for x in x_range.clone() {
-                            for y in y_range.clone() {
-                                probs[i][j] = apply_kernel(
-                                    &table_old.read().unwrap(),
-                                    &kernels.read().unwrap(),
-                                    &field_types.read().unwrap(),
-                                    (limit_neg, limit_pos),
-                                    x,
-                                    y,
-                                );
+        //                 for x in x_range.clone() {
+        //                     for y in y_range.clone() {
+        //                         probs[i][j] = apply_kernel(
+        //                             &table_old.read().unwrap(),
+        //                             &kernels.read().unwrap(),
+        //                             &field_types.read().unwrap(),
+        //                             (limit_neg, limit_pos),
+        //                             x,
+        //                             y,
+        //                         );
 
-                                j += 1;
-                            }
+        //                         j += 1;
+        //                     }
 
-                            i += 1;
-                            j = 0;
-                        }
+        //                     i += 1;
+        //                     j = 0;
+        //                 }
 
-                        (x_range.clone(), y_range.clone(), probs)
-                    }),
-                );
-            }
+        //                 (x_range.clone(), y_range.clone(), probs)
+        //             }),
+        //         );
+        //     }
 
-            for (x_range, y_range, probs) in rx.iter().take(9) {
-                let (mut i, mut j) = (0, 0);
+        //     for (x_range, y_range, probs) in rx.iter().take(9) {
+        //         let (mut i, mut j) = (0, 0);
 
-                for x in x_range.clone() {
-                    for y in y_range.clone() {
-                        self.table[t][(self.time_limit as isize + x) as usize]
-                            [(self.time_limit as isize + y) as usize] = probs[i][j];
+        //         for x in x_range.clone() {
+        //             for y in y_range.clone() {
+        //                 self.table[t][(self.time_limit as isize + x) as usize]
+        //                     [(self.time_limit as isize + y) as usize] = probs[i][j];
 
-                        j += 1;
-                    }
+        //                 j += 1;
+        //             }
 
-                    i += 1;
-                    j = 0;
-                }
-            }
-        }
+        //             i += 1;
+        //             j = 0;
+        //         }
+        //     }
+        // }
 
-        let duration = start.elapsed();
+        // let duration = start.elapsed();
 
-        println!("Computation took {:?}", duration);
+        // println!("Computation took {:?}", duration);
     }
 
     #[cfg(not(tarpaulin_include))]
@@ -288,7 +323,7 @@ impl DynamicPrograms for DynamicProgram {
 
     #[cfg(not(tarpaulin_include))]
     #[cfg(feature = "plotting")]
-    fn heatmap(&self, path: String, t: usize) -> anyhow::Result<()> {
+    fn heatmap(&self, path: String, d: usize, t: usize) -> anyhow::Result<()> {
         let multiplier = 0.075;
         let table = self.table[t].clone();
         let size = table.len();
@@ -306,11 +341,13 @@ impl DynamicPrograms for DynamicProgram {
         let min_prob = table
             .iter()
             .flatten()
+            .flatten()
             .filter(|x| x > &&0.0)
             .cloned()
             .fold(f64::INFINITY, f64::min);
         let max_prob = table
             .iter()
+            .flatten()
             .flatten()
             .cloned()
             .fold(f64::NEG_INFINITY, f64::max);
@@ -318,7 +355,7 @@ impl DynamicPrograms for DynamicProgram {
         let mut data = Vec::new();
         for i in 0..size {
             for j in 0..size {
-                let value = table[i][j].powf(multiplier);
+                let value = table[d][i][j].powf(multiplier);
                 let value = if value != 0.0 {
                     1.0 - (value - min_prob) / (max_prob - min_prob)
                 } else {
@@ -340,29 +377,24 @@ impl DynamicPrograms for DynamicProgram {
         }))
         .unwrap();
 
-        ctx.draw_series(vec![
-            Rectangle::new(
-                [(0.0, 0.0), (1.0, 1.0)],
-                RED.filled(),
-            ),
-        ])
-        .unwrap();
+        ctx.draw_series(vec![Rectangle::new([(0.0, 0.0), (1.0, 1.0)], RED.filled())])
+            .unwrap();
 
         Ok(())
     }
 
     #[cfg(not(tarpaulin_include))]
-    fn print(&self, t: usize) {
+    fn print(&self, d:usize, t: usize) {
         for y in 0..2 * self.time_limit + 1 {
             for x in 0..2 * self.time_limit + 1 {
-                print!("{:.4} ", self.table[t][x][y]);
+                print!("{:.4} ", self.table[t][d][x][y]);
             }
 
             println!();
         }
     }
 
-    #[cfg(feature = "saving")]
+    // #[cfg(feature = "saving")]
     fn save(&self, filename: String) -> std::io::Result<()> {
         let (limit_neg, limit_pos) = self.limits();
         let file = File::create(filename)?;
@@ -375,10 +407,14 @@ impl DynamicPrograms for DynamicProgram {
 
         encoder.write(&(self.time_limit as u64).to_le_bytes())?;
 
+        encoder.write(&(self.num_directions as u64).to_le_bytes())?;
+
         for t in 0..=limit_pos as usize {
-            for x in limit_neg..=limit_pos {
-                for y in limit_neg..=limit_pos {
-                    encoder.write(&self.at(x, y, t).to_le_bytes())?;
+            for d in 0..self.num_directions as usize{
+                for x in limit_neg..=limit_pos {
+                    for y in limit_neg..=limit_pos {
+                        encoder.write(&self.at(x, y, d, t).to_le_bytes())?;
+                    }
                 }
             }
         }
@@ -422,7 +458,7 @@ fn apply_kernel(
             let kernel_y = y - j;
 
             sum += table_old[(limit_pos + i) as usize][(limit_pos + j) as usize]
-                * kernel.at(kernel_x, kernel_y);
+                * kernel.prob_at(kernel_x, kernel_y);
         }
     }
 
@@ -430,7 +466,7 @@ fn apply_kernel(
 }
 
 #[cfg(not(tarpaulin_include))]
-impl Debug for DynamicProgram {
+impl Debug for CorDynamicProgram {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("DynamicProgram")
             .field("time_limit", &self.time_limit)
@@ -438,7 +474,7 @@ impl Debug for DynamicProgram {
     }
 }
 
-impl PartialEq for DynamicProgram {
+impl PartialEq for CorDynamicProgram {
     fn eq(&self, other: &Self) -> bool {
         self.time_limit == other.time_limit
             && self.table == other.table
@@ -446,70 +482,73 @@ impl PartialEq for DynamicProgram {
     }
 }
 
-impl Eq for DynamicProgram {}
+impl Eq for CorDynamicProgram {}
 
 pub struct DynamicProgramLayerIterator {
-    pub(crate) last_layer: Vec<Vec<f64>>,
+    pub(crate) last_layer: Vec<Vec<Vec<f64>>>,
     pub(crate) layer: usize,
-    pub(crate) dp: Option<DynamicProgram>,
+    pub(crate) dp: Option<CorDynamicProgram>,
     pub(crate) time_limit: usize,
+    pub(crate) num_directions: usize,
     pub(crate) kernels: Vec<Kernel>,
     pub(crate) field_types: Vec<Vec<usize>>,
 }
 
-impl Iterator for DynamicProgramLayerIterator {
-    type Item = Vec<Vec<f64>>;
+// impl Iterator for DynamicProgramLayerIterator {
+//     type Item = Vec<Vec<f64>>;
 
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.layer >= self.time_limit {
-            return None;
-        }
+//     fn next(&mut self) -> Option<Self::Item> {
+//         // if self.layer >= self.time_limit {
+//         //     return None;
+//         // }
 
-        if self.layer == 0 {
-            self.last_layer = vec![vec![0.0; 2 * self.time_limit + 1]; 2 * self.time_limit + 1];
-            self.last_layer[self.time_limit][self.time_limit] = 1.0;
-            self.layer += 1;
+//         // if self.layer == 0 {
+//         //     self.last_layer = vec![vec![vec![0.0; 2 * self.time_limit + 1]; 2 * self.time_limit + 1], n; num_directions];
+//         //     self.last_layer[self.time_limit][self.time_limit] = 1.0;
+//         //     self.layer += 1;
 
-            let mut table =
-                vec![vec![vec![0.0; 2 * self.time_limit + 1]; 2 * self.time_limit + 1]; 2];
-            table[0] = self.last_layer.clone();
+//         //     let mut table =
+//         //         vec![vec![vec![0.0; 2 * self.time_limit + 1]; 2 * self.time_limit + 1]; 2];
+//         //     table[0] = self.last_layer.clone();
 
-            self.dp = Some(DynamicProgram {
-                table,
-                time_limit: self.time_limit,
-                kernels: self.kernels.clone(),
-                field_types: self.field_types.clone(),
-            });
+//         //     self.dp = Some(CorDynamicProgram {
+//         //         table,
+//         //         time_limit: self.time_limit,
+//         //         num_directions: self.num_directions,
+//         //         kernels: self.kernels.clone(),
+//         //         field_types: self.field_types.clone(),
+//         //     });
 
-            return Some(self.last_layer.clone());
-        }
+//         //     return Some(self.last_layer.clone());
+//         // }
 
-        let mut table = vec![vec![vec![0.0; 2 * self.time_limit + 1]; 2 * self.time_limit + 1]; 2];
-        table[0] = self.last_layer.clone();
+//         // let mut table = vec![vec![vec![0.0; 2 * self.time_limit + 1]; 2 * self.time_limit + 1]; 2];
+//         // table[0] = self.last_layer.clone();
 
-        let dp = self.dp.as_mut().unwrap();
-        dp.table = table;
+//         // let dp = self.dp.as_mut().unwrap();
+//         // dp.table = table;
 
-        let (limit_neg, limit_pos) = dp.limits();
+//         // let (limit_neg, limit_pos) = dp.limits();
+        
+//         // for x in limit_neg..=limit_pos {
+//         //     for y in limit_neg..=limit_pos {
+//         //         // Revisit
+//         //         dp.apply_kernel_at(x, y, d, 1);
+//         //     }
+//         // }
 
-        for x in limit_neg..=limit_pos {
-            for y in limit_neg..=limit_pos {
-                dp.apply_kernel_at(x, y, 1);
-            }
-        }
+//         // self.last_layer = dp.table[1].clone();
+//         // self.layer += 1;
 
-        self.last_layer = dp.table[1].clone();
-        self.layer += 1;
+//         // Some(dp.table[1][0].clone())
+//     }
+// }
 
-        Some(dp.table[1].clone())
-    }
-}
-
-pub fn compute_multiple(dps: &mut [DynamicProgram]) {
+pub fn compute_multiple(dps: &mut [CorDynamicProgram]) {
     dps.par_iter_mut().for_each(|dp| dp.compute());
 }
 
-pub fn compute_multiple_save(dps: Vec<DynamicProgram>, filename: String) {
+pub fn compute_multiple_save(dps: Vec<CorDynamicProgram>, filename: String) {
     let dps = dps.into_iter().zip((0..).into_iter()).collect::<Vec<_>>();
 
     dps.into_par_iter().for_each(|(mut dp, i)| {
@@ -518,38 +557,38 @@ pub fn compute_multiple_save(dps: Vec<DynamicProgram>, filename: String) {
     });
 }
 
-pub fn compute_multiple_save_layered(dps: Vec<DynamicProgram>, path: String) {
-    let dps = dps.into_iter().zip((0..).into_iter()).collect::<Vec<_>>();
+// pub fn compute_multiple_save_layered(dps: Vec<CorDynamicProgram>, path: String) {
+//     let dps = dps.into_iter().zip((0..).into_iter()).collect::<Vec<_>>();
 
-    dps.into_par_iter().for_each(|(mut dp, i)| {
-        debug!("Computing dp {i}");
-        dp.compute();
+//     dps.into_par_iter().for_each(|(mut dp, i)| {
+//         debug!("Computing dp {i}");
+//         dp.compute();
 
-        let (limit_neg, limit_pos) = dp.limits();
+//         let (limit_neg, limit_pos) = dp.limits();
 
-        debug!("Saving dp {i}");
-        for t in 0..=limit_pos as usize {
-            if !Path::new(&path).join(format!("{i}")).exists() {
-                fs::create_dir(Path::new(&path).join(format!("{i}")))
-                    .expect("Could not create directory");
-            }
+//         debug!("Saving dp {i}");
+//         for t in 0..=limit_pos as usize {
+//             if !Path::new(&path).join(format!("{i}")).exists() {
+//                 fs::create_dir(Path::new(&path).join(format!("{i}")))
+//                     .expect("Could not create directory");
+//             }
 
-            let path = Path::new(&path)
-                .join(format!("{i}"))
-                .join(format!("{t}.dp"));
-            let file = File::create(&path).expect("Could not create file");
-            let mut writer = BufWriter::new(file);
+//             let path = Path::new(&path)
+//                 .join(format!("{i}"))
+//                 .join(format!("{t}.dp"));
+//             let file = File::create(&path).expect("Could not create file");
+//             let mut writer = BufWriter::new(file);
 
-            for x in limit_neg..=limit_pos {
-                for y in limit_neg..=limit_pos {
-                    writer
-                        .write(&dp.at(x, y, t).to_le_bytes())
-                        .expect("Could not write to file");
-                }
-            }
-        }
-    });
-}
+//             for x in limit_neg..=limit_pos {
+//                 for y in limit_neg..=limit_pos {
+//                     writer
+//                         .write(&dp.at(x, y, d, t).to_le_bytes())
+//                         .expect("Could not write to file");
+//                 }
+//             }
+//         }
+//     });
+// }
 
 #[cfg(test)]
 mod tests {
