@@ -8,8 +8,12 @@
 // pub mod multi_step;
 // pub mod standard;
 
+use rand::rngs::ThreadRng;
 use thiserror::Error;
 
+use rand::distributions::Distribution;
+use rand::distributions::WeightedError;
+use rand::distributions::WeightedIndex;
 use crate::dp::DynamicProgramPool;
 use crate::walk::Walk;
 
@@ -20,6 +24,7 @@ pub trait Walker {
         to_x: isize,
         to_y: isize,
         time_steps: usize,
+        rng: &ThreadRng
     ) -> Result<Walk, WalkerError>;
 
     fn generate_paths(
@@ -32,8 +37,13 @@ pub trait Walker {
     ) -> Result<Vec<Walk>, WalkerError> {
         let mut paths = Vec::new();
 
-        for _ in 0..qty {
-            paths.push(self.generate_path(dp, to_x, to_y, time_steps)?);
+        let mut rng  = rand::thread_rng();
+
+        for i in 0..qty {
+            if i % 1000 == 0 {
+                println!("p: {i}");
+            }
+            paths.push(self.generate_path(dp, to_x, to_y, time_steps, &rng)?);
         }
 
         Ok(paths)

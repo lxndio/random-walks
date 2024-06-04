@@ -32,12 +32,12 @@ use crate::kernel::Kernel;
 
 #[derive(Clone)]
 pub struct CorDynamicProgram {
-    pub/*(crate)*/ table: Vec<Vec<Vec<Vec<f64>>>>,
-    pub/*(crate)*/ time_limit: usize,
-    pub/*(crate)*/ num_directions: usize,
-    pub/*(crate)*/ kernels: Vec<Kernel>,
-    pub/*(crate)*/ field_types: Vec<Vec<usize>>,
-    pub/*(crate)*/ dir_kernel: DirKernel,
+    pub table: Vec<Vec<Vec<Vec<f64>>>>,
+    pub time_limit: usize,
+    pub num_directions: usize,
+    pub kernels: Vec<Vec<Kernel>>,
+    pub field_types: Vec<Vec<usize>>,
+    pub dir_kernel: Vec<DirKernel>,
 }
 
 impl CorDynamicProgram {
@@ -69,19 +69,18 @@ impl CorDynamicProgram {
     }
 
     fn apply_kernel_at(&mut self, x: isize, y: isize, d: usize, t: usize) {
-        let kernel = self.kernels[d].clone();
+        let field_type = self.field_type_at(x, y);
 
-        // Is this important?
-        let dir_kernel = self.dir_kernel.clone();
+        let kernel = self.kernels[field_type][d].clone();
+
+        let dir_kernel = self.dir_kernel[field_type].clone();
 
         let ks = (kernel.size() / 2) as isize;
         let (limit_neg, limit_pos) = self.limits();
         let mut sum = 0.0;
 
         for di in 0..self.num_directions as usize {
-            
             for (prev_kernel_x, prev_kernel_y) in dir_kernel.cells_pointing_to(d) {
-
                 let i = x + prev_kernel_x;
                 let j = y + prev_kernel_y;
 
@@ -92,18 +91,23 @@ impl CorDynamicProgram {
                 let kernel_x = x - i;
                 let kernel_y = y - j;
 
-                sum += self.at(i, j, di, t-1) * self.kernels[di].prob_at(kernel_x, kernel_y);
+                sum += self.at(i, j, di, t - 1)
+                    * self.kernels[field_type][di].prob_at(kernel_x, kernel_y);
             }
         }
 
         self.set(x, y, d, t, sum);
     }
 
-    fn field_type_at(&self, x: isize, y: isize) -> usize {
+    pub fn field_type_at(&self, x: isize, y: isize) -> usize {
         let x = (self.time_limit as isize + x) as usize;
         let y = (self.time_limit as isize + y) as usize;
 
         self.field_types[x][y]
+    }
+
+    pub fn field_type_set_bulk(&mut self, field_types_n: Vec<Vec<usize>>) {
+        self.field_types = field_types_n;
     }
 
     fn field_type_set(&mut self, x: isize, y: isize, val: usize) {
@@ -118,7 +122,11 @@ impl CorDynamicProgram {
     }
 
     #[cfg(feature = "saving")]
-    pub fn load(filename: String, kernels: Vec<Kernel>, dir_kernel: DirKernel) -> anyhow::Result<DynamicProgramPool> {
+    pub fn load(
+        filename: String,
+        kernels: Vec<Vec<Kernel>>,
+        dir_kernel: Vec<DirKernel>,
+    ) -> anyhow::Result<DynamicProgramPool> {
         let file = File::open(filename)?;
         let reader = BufReader::new(file);
         let mut decoder = Decoder::new(reader).context("could not create decoder")?;
@@ -132,19 +140,18 @@ impl CorDynamicProgram {
         let num_directions = match decoder.read_exact(&mut num_directions) {
             Ok(()) => u64::from_le_bytes(num_directions),
             Err(_) => bail!("could not read num_directions from file"),
-        };
+        } as usize;
 
-        
         let mut dp = CorDynamicProgram {
             table: vec![
                 vec![
                     vec![vec![0.0; 2 * time_limit + 1]; 2 * time_limit + 1];
-                    16
+                    num_directions
                 ];
                 time_limit + 1
             ],
             time_limit,
-            num_directions: 16,
+            num_directions: num_directions,
             kernels,
             field_types: vec![vec![0; 2 * time_limit + 1]; 2 * time_limit + 1],
             dir_kernel,
@@ -163,7 +170,7 @@ impl CorDynamicProgram {
         let mut buf = [0u8; 8];
 
         for t in 0..=limit_pos as usize {
-            for d in 0..num_directions as usize {
+            for d in 0..num_directions {
                 for x in limit_neg..=limit_pos {
                     for y in limit_neg..=limit_pos {
                         decoder.read_exact(&mut buf)?;
@@ -182,7 +189,6 @@ impl CorDynamicProgram {
 
         Ok(DynamicProgramPool::Single(dp))
     }
-
 
     // pub fn into_iter(self) -> DynamicProgramLayerIterator {
     //     DynamicProgramLayerIterator {
@@ -384,7 +390,7 @@ impl DynamicPrograms for CorDynamicProgram {
     }
 
     #[cfg(not(tarpaulin_include))]
-    fn print(&self, d:usize, t: usize) {
+    fn print(&self, d: usize, t: usize) {
         for y in 0..2 * self.time_limit + 1 {
             for x in 0..2 * self.time_limit + 1 {
                 print!("{:.4} ", self.table[t][d][x][y]);
@@ -398,7 +404,7 @@ impl DynamicPrograms for CorDynamicProgram {
     fn save(&self, filename: String) -> std::io::Result<()> {
         let (limit_neg, limit_pos) = self.limits();
         let file = File::create(filename)?;
-        let writer = BufWriter::new(file);
+        let writer: BufWriter<File> = BufWriter::new(file);
         let mut encoder = Encoder::new(writer, 9)?;
 
         encoder.multithread(4)?;
@@ -410,7 +416,7 @@ impl DynamicPrograms for CorDynamicProgram {
         encoder.write(&(self.num_directions as u64).to_le_bytes())?;
 
         for t in 0..=limit_pos as usize {
-            for d in 0..self.num_directions as usize{
+            for d in 0..self.num_directions as usize {
                 for x in limit_neg..=limit_pos {
                     for y in limit_neg..=limit_pos {
                         encoder.write(&self.at(x, y, d, t).to_le_bytes())?;
@@ -529,7 +535,7 @@ pub struct DynamicProgramLayerIterator {
 //         // dp.table = table;
 
 //         // let (limit_neg, limit_pos) = dp.limits();
-        
+
 //         // for x in limit_neg..=limit_pos {
 //         //     for y in limit_neg..=limit_pos {
 //         //         // Revisit
@@ -613,7 +619,7 @@ mod tests {
             unreachable!();
         };
 
-        assert_eq!(dp.at(0, 0, 0), 1.0);
+        assert_eq!(dp.at(0, 0, 0, 0), 1.0);
     }
 
     #[test]
@@ -629,9 +635,9 @@ mod tests {
             unreachable!();
         };
 
-        dp.set(0, 0, 0, 10.0);
+        dp.set(0, 0, 0, 0, 10.0);
 
-        assert_eq!(dp.at(0, 0, 0,), 10.0);
+        assert_eq!(dp.at(0, 0, 0, 0), 10.0);
     }
 
     #[test]
@@ -649,11 +655,11 @@ mod tests {
             unreachable!();
         };
 
-        assert_eq!(dp.at(0, 0, 1), 0.2);
-        assert_eq!(dp.at(-1, 0, 1), 0.2);
-        assert_eq!(dp.at(1, 0, 1), 0.2);
-        assert_eq!(dp.at(0, -1, 1), 0.2);
-        assert_eq!(dp.at(0, 1, 1), 0.2);
+        assert_eq!(dp.at(0, 0, 1, 0), 0.2);
+        assert_eq!(dp.at(-1, 0, 1, 0), 0.2);
+        assert_eq!(dp.at(1, 0, 1, 0), 0.2);
+        assert_eq!(dp.at(0, -1, 1, 0), 0.2);
+        assert_eq!(dp.at(0, 1, 1, 0), 0.2);
     }
 
     #[test]

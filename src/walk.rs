@@ -17,7 +17,9 @@ use plotters::backend::BitMapBackend;
 use plotters::chart::ChartBuilder;
 use plotters::drawing::IntoDrawingArea;
 use plotters::element::{Circle, EmptyElement, Text};
+use plotters::style::RGBAColor;
 use plotters::prelude::{IntoFont, LineSeries, PointSeries, RGBColor, BLACK, WHITE};
+use plotters::element::Rectangle;
 use rand::Rng;
 
 use crate::dataset::point::XYPoint;
@@ -211,12 +213,16 @@ impl Walk {
     /// Walk::plot_multiple(&walks, "walks.png")?;
     /// ```
     #[cfg(feature = "plotting")]
-    pub fn plot_multiple<S: Into<String>>(walks: &[Walk], filename: S) -> anyhow::Result<()> {
+    pub fn plot_multiple<S: Into<String>>(walks: &[Walk], filename: S, fieldtype: Option<Vec<Vec<usize>>>) -> anyhow::Result<()> {
+        use plotters::style::Color;
+
         let filename = filename.into();
 
         // Initialize plot
 
         let (coordinate_range_x, coordinate_range_y) = point_range(walks);
+        //I'm so sorry
+        let (coordinate_range_x2, coordinate_range_y2) = point_range(walks);
 
         let root = BitMapBackend::new(&filename, (1000, 1000)).into_drawing_area();
         root.fill(&WHITE).unwrap();
@@ -228,6 +234,42 @@ impl Walk {
             .build_cartesian_2d(coordinate_range_x, coordinate_range_y)?;
 
         chart.configure_mesh().draw()?;
+
+
+        // Draw field_type
+        if (fieldtype.is_some()) {
+            let fieldtype = fieldtype.unwrap();
+            let time_limit = (fieldtype.len()-1) / 2;
+
+            println!("{} {}", coordinate_range_x2.start, coordinate_range_x2.end);
+
+            let mut data = Vec::new();
+
+            for y in coordinate_range_y2.end..coordinate_range_y2.start {
+                for x in coordinate_range_x2.start..coordinate_range_x2.end {
+                    // print!("{} ", fieldtype[(-1 +y + time_limit as i64) as usize][(-1 + x + time_limit as i64) as usize]);
+                    let mut nx = (x + time_limit as i64) as usize;
+                    let mut ny = (y + time_limit as i64) as usize;
+                    if (nx >= 2* time_limit +1) {nx = 2* time_limit;}
+                    if (ny >= 2* time_limit +1) {ny = 2* time_limit;}
+                    data.push(((x as i64, y as i64), fieldtype[nx][ny]))
+                }
+                // println!();
+            }
+
+            chart.draw_series(data.iter().map(|((x, y), value)| {
+                let mut color = RGBAColor(0, 0, 0, 0.0);
+                if *value == 0 {
+                    color = RGBAColor(0, 100, 0, 0.2);
+                }
+                if *value == 2 {
+                    color = RGBAColor(0, 0, 200, 0.2);
+                }
+
+        
+                Rectangle::new([(*x, *y), (*x + 1, *y + 1)], color.filled())
+            }))?;
+        }
 
         // Draw walks
 
@@ -274,6 +316,26 @@ impl Walk {
                 },
             ))?;
         }
+
+
+        
+        // let mut data = Vec::new();
+        // for i in 0..(coordinate_range_y.end-coordinate_range_y.start) as usize {
+        //     for j in 0..(coordinate_range_x.end-coordinate_range_x.start) as usize {
+        //         print!("{} ", fieldtype[coordinate_range_y.start+i][coordinate_range_x.start+j]);
+        //         let value = 0;
+
+        //         data.push(((i as f64, j as f64), value));
+        //     }
+        //     println!();
+        // }
+
+        // chart.draw_series(data.iter().map(|((x, y), value)| {
+        //     let color = plasma_colormap(1.0 - value.clone());
+    
+        //     Rectangle::new([(*x, *y), (*x + 1.0, *y + 1.0)], color.filled())
+        // }))
+        // .unwrap();
 
         Ok(())
     }

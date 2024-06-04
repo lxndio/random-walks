@@ -136,8 +136,8 @@ pub struct DynamicProgramBuilder {
     time_limit: Option<usize>,
     num_directions: Option<usize>,
     dp_type: Option<DynamicProgramType>,
-    kernels: Option<Vec<(usize, Kernel)>>,
-    dir_kernel: Option<DirKernel>,
+    kernels: Option<Vec<Vec<(usize, Kernel)>>>,
+    dir_kernel: Option<Vec<DirKernel>>,
     field_types: Option<Vec<Vec<usize>>>,
     barriers: Vec<XYPoint>,
 }
@@ -193,7 +193,7 @@ impl DynamicProgramBuilder {
     }
 
     pub fn kernels(mut self, kernels: Vec<(usize, Kernel)>) -> Self {
-        self.kernels = Some(kernels);
+        self.kernels = Some(vec![kernels]);
 
         self
     }
@@ -258,12 +258,13 @@ impl DynamicProgramBuilder {
 
         // Map field types to contiguous value range
 
-        let mut kernels_mapped = Vec::new();
+        let mut kernels_mapped = vec![Vec::new()];
         let mut field_type_map = HashMap::new();
         let mut i = 0usize;
 
-        for (field_type, kernel) in kernels.iter() {
-            kernels_mapped.push(kernel.clone());
+        //Todo fix this whole builder
+        for (field_type, kernel) in kernels[0].iter() {
+            kernels_mapped.push(vec![kernel.clone()]);
             field_type_map.insert(field_type, i);
             i += 1;
         }
@@ -277,7 +278,7 @@ impl DynamicProgramBuilder {
         // Add barriers
 
         let empty_kernel = kernel!(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
-        kernels_mapped.push(empty_kernel);
+        kernels_mapped.push(vec![empty_kernel]);
 
         for (x, y) in self.barriers.iter().map(|p| <(i64, i64)>::from(*p)) {
             if x < -(time_limit as i64)
