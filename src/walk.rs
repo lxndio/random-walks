@@ -180,22 +180,22 @@ impl Walk {
 
         // Draw walk
 
-        let walk: Vec<(i64, i64)> = self.0.iter().map(|x| (*x).into()).collect();
+        // let walk: Vec<(f64, f64)> = self.0.iter().map(|x| (*x).into()).collect();
 
-        chart.draw_series(LineSeries::new(walk.to_vec(), &BLACK))?;
+        // chart.draw_series(LineSeries::new(walk.to_vec(), &BLACK))?;
 
         // Draw start and end point
 
-        chart.draw_series(PointSeries::of_element(
-            vec![*walk.first().unwrap(), *walk.last().unwrap()],
-            5,
-            &BLACK,
-            &|c, s, st| {
-                EmptyElement::at(c)
-                    + Circle::new((0, 0), s, st.filled())
-                    + Text::new(format!("{:?}", c), (10, 0), ("sans-serif", 10).into_font())
-            },
-        ))?;
+        // chart.draw_series(PointSeries::of_element(
+        //     vec![*walk.first().unwrap(), *walk.last().unwrap()],
+        //     5.0,
+        //     &BLACK,
+        //     &|c, s, st| {
+        //         EmptyElement::at(c)
+        //             + Circle::new((0.0, 0.0), s, st.filled())
+        //             + Text::new(format!("{:?}", c), (10.0, 0.0), ("sans-serif", 10).into_font())
+        //     },
+        // ))?;
 
         Ok(())
     }
@@ -220,20 +220,28 @@ impl Walk {
 
         // Initialize plot
 
-        let (coordinate_range_x, coordinate_range_y) = point_range(walks);
-        //I'm so sorry
-        let (coordinate_range_x2, coordinate_range_y2) = point_range(walks);
+        let (mut coordinate_range_x, mut coordinate_range_y) = point_range(walks);
 
-        let root = BitMapBackend::new(&filename, (1000, 1000)).into_drawing_area();
+        println!("({}..{}, {}..{})", coordinate_range_x.start, coordinate_range_x.end, coordinate_range_y.start, coordinate_range_y.end);
+
+        coordinate_range_x = -200.0..200.0;
+        coordinate_range_y = 200.0..-200.0;
+
+        //I'm so sorry
+        let coordinate_range_x2 = coordinate_range_x.clone();
+        let coordinate_range_y2 = coordinate_range_y.clone();
+        // let (coordinate_range_x2, coordinate_range_y2) = (coorinate_range_x.clone(), coordinate_range_y.clone());
+
+        let root = BitMapBackend::new(&filename, (500, 500)).into_drawing_area();
         root.fill(&WHITE).unwrap();
-        let root = root.margin(10, 10, 10, 10);
+        // let root = root.margin(10, 10, 10, 10);
 
         let mut chart = ChartBuilder::on(&root)
-            .x_label_area_size(20)
-            .y_label_area_size(20)
+            // .x_label_area_size(20)
+            // .y_label_area_size(20)
             .build_cartesian_2d(coordinate_range_x, coordinate_range_y)?;
 
-        chart.configure_mesh().draw()?;
+        // chart.configure_mesh().draw()?;
 
 
         // Draw field_type
@@ -245,14 +253,14 @@ impl Walk {
 
             let mut data = Vec::new();
 
-            for y in coordinate_range_y2.end..coordinate_range_y2.start {
-                for x in coordinate_range_x2.start..coordinate_range_x2.end {
+            for y in coordinate_range_y2.end as i64..coordinate_range_y2.start as i64 {
+                for x in coordinate_range_x2.start as i64..coordinate_range_x2.end as i64{
                     // print!("{} ", fieldtype[(-1 +y + time_limit as i64) as usize][(-1 + x + time_limit as i64) as usize]);
                     let mut nx = (x + time_limit as i64) as usize;
                     let mut ny = (y + time_limit as i64) as usize;
                     if (nx >= 2* time_limit +1) {nx = 2* time_limit;}
                     if (ny >= 2* time_limit +1) {ny = 2* time_limit;}
-                    data.push(((x as i64, y as i64), fieldtype[nx][ny]))
+                    data.push(((x as f64, y as f64), fieldtype[nx][ny]))
                 }
                 // println!();
             }
@@ -267,15 +275,15 @@ impl Walk {
                 }
 
         
-                Rectangle::new([(*x, *y), (*x + 1, *y + 1)], color.filled())
+                Rectangle::new([(*x-0.5, *y-0.5), (*x + 0.5, *y + 0.5)], color.filled())
             }))?;
         }
 
         // Draw walks
 
-        let walks: Vec<Vec<(i64, i64)>> = walks
+        let walks: Vec<Vec<(f64, f64)>> = walks
             .iter()
-            .map(|w| w.iter().map(|p| (p.x, p.y)).collect())
+            .map(|w| w.iter().map(|p| (p.x as f64, p.y as f64)).collect())
             .collect();
 
         let mut rng = rand::thread_rng();
@@ -284,27 +292,29 @@ impl Walk {
             chart.draw_series(LineSeries::new(
                 walk.clone(),
                 RGBColor(
-                    rng.gen_range(30..220),
-                    rng.gen_range(30..220),
-                    rng.gen_range(30..220),
+                    rng.gen_range(30..150),
+                    rng.gen_range(30..150),
+                    rng.gen_range(30..150),
                 ),
             ))?;
         }
 
         // Find unique start and end points
 
-        let mut se_points = HashSet::new();
+        // let mut se_points = HashSet::new();
 
-        for walk in walks.iter() {
-            se_points.insert((
-                walk.first().copied().unwrap(),
-                walk.last().copied().unwrap(),
-            ));
-        }
+        // for walk in walks.iter() {
+        //     se_points.insert((
+        //         walk.first().copied().unwrap(),
+        //         walk.last().copied().unwrap(),
+        //     ));
+        // }
+        let start = walks[0].first().copied().unwrap();
+        let end =  walks[0].last().copied().unwrap();
 
         // Draw start and end points
 
-        for (start, end) in se_points {
+        // for (start, end) in se_points {
             chart.draw_series(PointSeries::of_element(
                 vec![start, end],
                 5,
@@ -312,13 +322,13 @@ impl Walk {
                 &|c, s, st| {
                     EmptyElement::at(c)
                         + Circle::new((0, 0), s, st.filled())
-                        + Text::new(format!("{:?}", c), (10, 0), ("sans-serif", 10).into_font())
+                        // + Text::new(format!("{:?}", c), (10, 0), ("sans-serif", 10).into_font())
                 },
             ))?;
-        }
+        // }
 
 
-        
+        // plot_walky
         // let mut data = Vec::new();
         // for i in 0..(coordinate_range_y.end-coordinate_range_y.start) as usize {
         //     for j in 0..(coordinate_range_x.end-coordinate_range_x.start) as usize {
@@ -342,19 +352,39 @@ impl Walk {
 }
 
 #[cfg(feature = "plotting")]
-fn point_range(walks: &[Walk]) -> (Range<i64>, Range<i64>) {
+fn point_range(walks: &[Walk]) -> (Range<f64>, Range<f64>) {
     // Compute size of plotting area
 
     let points: Vec<_> = walks.iter().flat_map(|x| &x.0).copied().collect();
 
-    let xs: Vec<i64> = points.iter().map(|p| p.x).collect();
-    let ys: Vec<i64> = points.iter().map(|p| p.y).collect();
+    let xs: Vec<f64> = points.iter().map(|p| p.x as f64).collect();
+    let ys: Vec<f64> = points.iter().map(|p| p.y as f64).collect();
 
-    let x_range = (*xs.iter().min().unwrap(), *xs.iter().max().unwrap());
-    let y_range = (*ys.iter().min().unwrap(), *ys.iter().max().unwrap());
+    let mut y_min = ys.iter().cloned().fold(f64::INFINITY, f64::min);
+    let mut y_max = ys.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
 
-    let coordinate_range_x = x_range.0 - 5..x_range.1 + 5;
-    let coordinate_range_y = y_range.1 + 5..y_range.0 - 5;
+    let mut x_min = xs.iter().cloned().fold(f64::INFINITY, f64::min);
+    let mut x_max = xs.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+
+    if (y_max - y_min > x_max - x_min) {
+        let av = (x_max - x_min)/2.0 + x_min;
+        x_min = av - (y_max - y_min)/2.0;
+        x_max = av + (y_max - y_min)/2.0;
+    }
+
+    if (x_max - x_min > y_max - y_min) {
+        let av = (y_max - y_min)/2.0 + y_min;
+        y_min = av - (x_max - x_min)/2.0;
+        y_max = av + (x_max - x_min)/2.0;
+    }
+
+    let y_range = (y_min, y_max);
+    let x_range = (x_min, x_max);
+    // let x_range = (*xs.iter().min().unwrap(), *xs.iter().max().unwrap());
+    // let y_range = (*ys.iter().min().unwrap(), *ys.iter().max().unwrap());
+
+    let coordinate_range_x = x_range.0 - 5.0..x_range.1 + 5.0;
+    let coordinate_range_y = y_range.1 + 5.0..y_range.0 - 5.0;
 
     (coordinate_range_x, coordinate_range_y)
 }

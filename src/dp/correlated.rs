@@ -36,6 +36,7 @@ pub struct CorDynamicProgram {
     pub time_limit: usize,
     pub num_directions: usize,
     pub kernels: Vec<Vec<Kernel>>,
+    pub tem_field_types: Vec<isize>,
     pub field_types: Vec<Vec<usize>>,
     pub dir_kernel: Vec<DirKernel>,
 }
@@ -69,7 +70,8 @@ impl CorDynamicProgram {
     }
 
     fn apply_kernel_at(&mut self, x: isize, y: isize, d: usize, t: usize) {
-        let field_type = self.field_type_at(x, y);
+        let field_type = self.field_type_at_t(x, y, t);
+        // println!("t {} f {}", t, field_type);
 
         let kernel = self.kernels[field_type][d].clone();
 
@@ -106,6 +108,14 @@ impl CorDynamicProgram {
         self.field_types[x][y]
     }
 
+    pub fn field_type_at_t(&self, x: isize, y: isize, t: usize) -> usize {
+        if self.tem_field_types[t] >= 0 {
+            return self.tem_field_types[t] as usize;
+        }
+
+        self.field_type_at(x, y)
+    }
+
     pub fn field_type_set_bulk(&mut self, field_types_n: Vec<Vec<usize>>) {
         self.field_types = field_types_n;
     }
@@ -115,6 +125,11 @@ impl CorDynamicProgram {
         let y = (self.time_limit as isize + y) as usize;
 
         self.field_types[x][y] = val;
+    }
+
+    fn tem_field_type_set(&mut self, t: usize, val: isize) {
+
+        self.tem_field_types[t] = val;
     }
 
     pub fn get_num_directions(&self) -> usize {
@@ -153,6 +168,7 @@ impl CorDynamicProgram {
             time_limit,
             num_directions: num_directions,
             kernels,
+            tem_field_types: vec![-1; time_limit+1],
             field_types: vec![vec![0; 2 * time_limit + 1]; 2 * time_limit + 1],
             dir_kernel,
         };
@@ -187,6 +203,13 @@ impl CorDynamicProgram {
             }
         }
 
+        for t in 0..=limit_pos as usize  {
+            decoder.read_exact(&mut buf)?;
+            dp.tem_field_type_set(t, i64::from_le_bytes(buf) as isize);
+        }
+
+        // println!("tem {} {}", dp.tem_field_types[0], dp.tem_field_types[limit_pos as usize]);
+
         Ok(DynamicProgramPool::Single(dp))
     }
 
@@ -211,7 +234,10 @@ impl DynamicPrograms for CorDynamicProgram {
     fn compute(&mut self) {
         let (limit_neg, limit_pos) = self.limits();
 
-        self.set(0, 0, 0, 0, 1.0);
+        // for d in 0..self.num_directions as usize {
+        //     self.set(0, 0, d, 0, 1.0 / (self.num_directions as f64));
+        // }
+        self.set(0, 0, 8, 0, 1.0);
 
         let start = Instant::now();
 
@@ -429,6 +455,10 @@ impl DynamicPrograms for CorDynamicProgram {
             for y in limit_neg..=limit_pos {
                 encoder.write(&(self.field_type_at(x, y) as u64).to_le_bytes())?;
             }
+        }
+
+        for t in 0..=limit_pos as usize {
+            encoder.write(&(self.tem_field_types[t] as i64).to_le_bytes())?;
         }
 
         Ok(())

@@ -307,6 +307,7 @@ impl DynamicProgramBuilder {
             num_directions,
             kernels: kernels_mapped,
             dir_kernel,
+            tem_field_types: vec![-1;  time_limit],
             field_types,
         }))
     }
