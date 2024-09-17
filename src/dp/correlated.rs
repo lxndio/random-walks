@@ -237,7 +237,7 @@ impl DynamicPrograms for CorDynamicProgram {
         // for d in 0..self.num_directions as usize {
         //     self.set(0, 0, d, 0, 1.0 / (self.num_directions as f64));
         // }
-        self.set(0, 0, 8, 0, 1.0);
+        self.set(0, 0, 0, 0, 1.0);
 
         let start = Instant::now();
 
