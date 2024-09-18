@@ -33,6 +33,7 @@ use crate::kernel::Kernel;
 #[derive(Clone)]
 pub struct CorDynamicProgram {
     pub table: Vec<Vec<Vec<Vec<f64>>>>,
+    pub max_distance: usize,
     pub time_limit: usize,
     pub num_directions: usize,
     pub kernels: Vec<Vec<Kernel>>,
@@ -43,8 +44,8 @@ pub struct CorDynamicProgram {
 
 impl CorDynamicProgram {
     pub fn at(&self, x: isize, y: isize, d: usize, t: usize) -> f64 {
-        let x = (self.time_limit as isize + x) as usize;
-        let y = (self.time_limit as isize + y) as usize;
+        let x = (self.max_distance as isize + x) as usize;
+        let y = (self.max_distance as isize + y) as usize;
 
         self.table[t][d][x][y]
     }
@@ -63,8 +64,8 @@ impl CorDynamicProgram {
     }
 
     pub fn set(&mut self, x: isize, y: isize, d: usize, t: usize, val: f64) {
-        let x = (self.time_limit as isize + x) as usize;
-        let y = (self.time_limit as isize + y) as usize;
+        let x = (self.max_distance as isize + x) as usize;
+        let y = (self.max_distance as isize + y) as usize;
 
         self.table[t][d][x][y] = val;
     }
@@ -102,8 +103,8 @@ impl CorDynamicProgram {
     }
 
     pub fn field_type_at(&self, x: isize, y: isize) -> usize {
-        let x = (self.time_limit as isize + x) as usize;
-        let y = (self.time_limit as isize + y) as usize;
+        let x = (self.max_distance as isize + x) as usize;
+        let y = (self.max_distance as isize + y) as usize;
 
         self.field_types[x][y]
     }
@@ -121,8 +122,8 @@ impl CorDynamicProgram {
     }
 
     fn field_type_set(&mut self, x: isize, y: isize, val: usize) {
-        let x = (self.time_limit as isize + x) as usize;
-        let y = (self.time_limit as isize + y) as usize;
+        let x = (self.max_distance as isize + x) as usize;
+        let y = (self.max_distance as isize + y) as usize;
 
         self.field_types[x][y] = val;
     }
@@ -151,6 +152,11 @@ impl CorDynamicProgram {
             Ok(()) => u64::from_le_bytes(time_limit),
             Err(_) => bail!("could not read time limit from file"),
         } as usize;
+        let mut max_distance = [0u8; 8];
+        let max_distance = match decoder.read_exact(&mut max_distance) {
+            Ok(()) => u64::from_le_bytes(max_distance),
+            Err(_) => bail!("could not read max_distance from file"),
+        } as usize;
         let mut num_directions = [0u8; 8];
         let num_directions = match decoder.read_exact(&mut num_directions) {
             Ok(()) => u64::from_le_bytes(num_directions),
@@ -160,32 +166,25 @@ impl CorDynamicProgram {
         let mut dp = CorDynamicProgram {
             table: vec![
                 vec![
-                    vec![vec![0.0; 2 * time_limit + 1]; 2 * time_limit + 1];
+                    vec![vec![0.0; 2 * max_distance + 1]; 2 * max_distance + 1];
                     num_directions
                 ];
                 time_limit + 1
             ],
+            max_distance,
             time_limit,
             num_directions: num_directions,
             kernels,
             tem_field_types: vec![-1; time_limit+1],
-            field_types: vec![vec![0; 2 * time_limit + 1]; 2 * time_limit + 1],
+            field_types: vec![vec![0; 2 * max_distance + 1]; 2 * max_distance + 1],
             dir_kernel,
         };
 
-        // let DynamicProgramPool::Single(mut dp) = DynamicProgramBuilder::new()
-        //     .simple()
-        //     .time_limit(time_limit as usize)
-        //     .kernel(kernel!(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0))
-        //     .build()?
-        // else {
-        //     unreachable!();
-        // };
 
         let (limit_neg, limit_pos) = dp.limits();
         let mut buf = [0u8; 8];
 
-        for t in 0..=limit_pos as usize {
+        for t in 0..=dp.time_limit as usize {
             for d in 0..num_directions {
                 for x in limit_neg..=limit_pos {
                     for y in limit_neg..=limit_pos {
@@ -203,7 +202,7 @@ impl CorDynamicProgram {
             }
         }
 
-        for t in 0..=limit_pos as usize  {
+        for t in 0..=dp.time_limit as usize  {
             decoder.read_exact(&mut buf)?;
             dp.tem_field_type_set(t, i64::from_le_bytes(buf) as isize);
         }
@@ -213,22 +212,12 @@ impl CorDynamicProgram {
         Ok(DynamicProgramPool::Single(dp))
     }
 
-    // pub fn into_iter(self) -> DynamicProgramLayerIterator {
-    //     DynamicProgramLayerIterator {
-    //         last_layer: Vec::new(),
-    //         layer: 0,
-    //         dp: None,
-    //         time_limit: self.time_limit,
-    //         kernels: self.kernels,
-    //         field_types: self.field_types,
-    //     }
-    // }
 }
 
 impl DynamicPrograms for CorDynamicProgram {
     #[cfg(not(tarpaulin_include))]
     fn limits(&self) -> (isize, isize) {
-        (-(self.time_limit as isize), self.time_limit as isize)
+        (-(self.max_distance as isize), self.max_distance as isize)
     }
 
     fn compute(&mut self) {
@@ -241,7 +230,7 @@ impl DynamicPrograms for CorDynamicProgram {
 
         let start = Instant::now();
 
-        for t in 1..=limit_pos as usize {
+        for t in 1..=self.time_limit as usize {
             if t % 10 == 0 {
                 println!("t: {t}");
             }
@@ -417,8 +406,8 @@ impl DynamicPrograms for CorDynamicProgram {
 
     #[cfg(not(tarpaulin_include))]
     fn print(&self, d: usize, t: usize) {
-        for y in 0..2 * self.time_limit + 1 {
-            for x in 0..2 * self.time_limit + 1 {
+        for y in 0..2 * self.max_distance + 1 {
+            for x in 0..2 * self.max_distance + 1 {
                 print!("{:.4} ", self.table[t][d][x][y]);
             }
 
@@ -441,7 +430,7 @@ impl DynamicPrograms for CorDynamicProgram {
 
         encoder.write(&(self.num_directions as u64).to_le_bytes())?;
 
-        for t in 0..=limit_pos as usize {
+        for t in 0..=self.time_limit as usize {
             for d in 0..self.num_directions as usize {
                 for x in limit_neg..=limit_pos {
                     for y in limit_neg..=limit_pos {
@@ -457,7 +446,7 @@ impl DynamicPrograms for CorDynamicProgram {
             }
         }
 
-        for t in 0..=limit_pos as usize {
+        for t in 0..=self.time_limit as usize {
             encoder.write(&(self.tem_field_types[t] as i64).to_le_bytes())?;
         }
 

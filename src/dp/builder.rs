@@ -303,11 +303,12 @@ impl DynamicProgramBuilder {
                 ];
                 time_limit + 1
             ],
+            max_distance: time_limit,
             time_limit,
             num_directions,
             kernels: kernels_mapped,
             dir_kernel,
-            tem_field_types: vec![-1;  time_limit],
+            tem_field_types: vec![-1; time_limit],
             field_types,
         }))
     }
