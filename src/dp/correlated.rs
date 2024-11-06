@@ -54,8 +54,8 @@ impl CorDynamicProgram {
         let (limit_neg, limit_pos) = self.limits();
 
         if x >= limit_neg && x <= limit_pos && y >= limit_neg && y <= limit_pos {
-            let x = (self.time_limit as isize + x) as usize;
-            let y = (self.time_limit as isize + y) as usize;
+            let x = (self.max_distance as isize + x) as usize;
+            let y = (self.max_distance as isize + y) as usize;
 
             self.table[t][d][x][y]
         } else {
@@ -152,16 +152,18 @@ impl CorDynamicProgram {
             Ok(()) => u64::from_le_bytes(time_limit),
             Err(_) => bail!("could not read time limit from file"),
         } as usize;
-        let mut max_distance = [0u8; 8];
-        let max_distance = match decoder.read_exact(&mut max_distance) {
-            Ok(()) => u64::from_le_bytes(max_distance),
-            Err(_) => bail!("could not read max_distance from file"),
-        } as usize;
         let mut num_directions = [0u8; 8];
         let num_directions = match decoder.read_exact(&mut num_directions) {
             Ok(()) => u64::from_le_bytes(num_directions),
             Err(_) => bail!("could not read num_directions from file"),
         } as usize;
+        let mut max_distance = [0u8; 8];
+        let max_distance = match decoder.read_exact(&mut max_distance) {
+            Ok(()) => u64::from_le_bytes(max_distance),
+            Err(_) => bail!("could not read max_distance from file"),
+        } as usize;
+
+        println!("{}, {}", num_directions, max_distance);
 
         let mut dp = CorDynamicProgram {
             table: vec![
@@ -173,7 +175,7 @@ impl CorDynamicProgram {
             ],
             max_distance,
             time_limit,
-            num_directions: num_directions,
+            num_directions,
             kernels,
             tem_field_types: vec![-1; time_limit+1],
             field_types: vec![vec![0; 2 * max_distance + 1]; 2 * max_distance + 1],
@@ -429,6 +431,9 @@ impl DynamicPrograms for CorDynamicProgram {
         encoder.write(&(self.time_limit as u64).to_le_bytes())?;
 
         encoder.write(&(self.num_directions as u64).to_le_bytes())?;
+
+        encoder.write(&(self.max_distance as u64).to_le_bytes())?;
+        println!("{}, {}", self.num_directions, self.max_distance);
 
         for t in 0..=self.time_limit as usize {
             for d in 0..self.num_directions as usize {
